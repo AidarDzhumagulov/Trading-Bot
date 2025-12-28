@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.lifespan import lifespan
+from app.core.config import settings
 from app.presentation.routers.v1.user import router as user_router
 from app.presentation.routers.v1.bot_config import router as bot_config_router
 from app.presentation.routers.v1.cycle import router as cycle_router
@@ -13,9 +14,11 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    cors_origins = ["*"] if settings.CORS_ORIGINS == "*" else [origin.strip() for origin in settings.CORS_ORIGINS.split(",")]
+
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173", "http://0.0.0.0:5173"],
+        allow_origins=cors_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
