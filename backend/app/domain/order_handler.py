@@ -1,7 +1,7 @@
 from decimal import Decimal
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from app.infrastructure.persistence.sqlalchemy.models import Order, DcaCycle, BotConfig
 from app.infrastructure.persistence.sqlalchemy.models.order import OrderStatus
@@ -23,10 +23,28 @@ class OrderHandler:
         db_order = result.scalar_one_or_none()
 
         if not db_order:
-            logger.error(f"[OrderHandler] Ордер {binance_id} не найден в БД. Пропускаем.")
-            all_orders = await self.session.execute(select(Order))
-            logger.info(f"[OrderHandler] Всего ордеров в БД: {len(all_orders.scalars().all())}")
-            return
+            stmt = select(DcaCycle).where(DcaCycle.current_tp_order_id == binance_id)
+            result = await self.session.execute(stmt)
+            cycle_with_tp = result.scalar_one_or_none()
+            
+            if cycle_with_tp:
+                logger.warning(f"[OrderHandler] TP-ордер {binance_id} найден через current_tp_order_id, но отсутствует в таблице orders. Создаем запись.")
+                db_order = Order(
+                    cycle_id=cycle_with_tp.id,
+                    binance_order_id=binance_id,
+                    order_type="SELL_TP",
+                    order_index=-1,
+                    price=float(binance_order.get('price', 0)),
+                    amount=float(binance_order.get('amount', cycle_with_tp.total_base_qty)),
+                    status=OrderStatus.ACTIVE
+                )
+                self.session.add(db_order)
+                await self.session.flush()
+            else:
+                logger.error(f"[OrderHandler] Ордер {binance_id} не найден в БД и не является текущим TP-ордером. Пропускаем.")
+                all_orders = await self.session.execute(select(Order))
+                logger.info(f"[OrderHandler] Всего ордеров в БД: {len(all_orders.scalars().all())}")
+                return
 
         if db_order.status == OrderStatus.FILLED:
             logger.info(f"[OrderHandler] Ордер {binance_id} уже обработан (status=filled)")
@@ -104,6 +122,11 @@ class OrderHandler:
         if cycle.current_tp_order_id:
             try:
                 await self.exchange.cancel_order(cycle.current_tp_order_id, config.symbol)
+                stmt = update(Order).where(
+                    Order.binance_order_id == cycle.current_tp_order_id
+                ).values(status=OrderStatus.CANCELED)
+                await self.session.execute(stmt)
+                logger.info(f"[OrderHandler] Старый TP-ордер {cycle.current_tp_order_id} отменен и помечен как CANCELED в БД")
             except Exception as e:
                 logger.error(f"Не удалось отменить старый TP: {e}")
 
@@ -115,7 +138,20 @@ class OrderHandler:
             price=float(tp_price)
         )
 
-        cycle.current_tp_order_id = tp_res['id']
+        tp_binance_id = str(tp_res['id'])
+        cycle.current_tp_order_id = tp_binance_id
+
+        new_tp_order = Order(
+            cycle_id=cycle.id,
+            binance_order_id=tp_binance_id,
+            order_type="SELL_TP",
+            order_index=-1,
+            price=float(tp_price),
+            amount=float(cycle.total_base_qty),
+            status=OrderStatus.ACTIVE
+        )
+        self.session.add(new_tp_order)
+        logger.info(f"[OrderHandler] TP-ордер создан и сохранен в БД: binance_id={tp_binance_id}, price={tp_price:.2f}, amount={cycle.total_base_qty}")
 
         next_index = db_order.order_index + 1
         stmt = select(Order).where(
@@ -138,6 +174,8 @@ class OrderHandler:
             logger.info(f"[OrderHandler] Следующий ордер создан: binance_id={next_order.binance_order_id}, order_id={next_order.id}")
 
     async def _handle_tp_fill(self, db_order, cycle, config, binance_order: dict):
+        logger.info(f"[OrderHandler] Обработка исполнения TP ордера {db_order.binance_order_id}")
+        
         db_order.status = OrderStatus.FILLED
         cycle.status = CycleStatus.CLOSED
         cycle.closed_at = datetime.utcnow()
@@ -154,12 +192,13 @@ class OrderHandler:
             try:
                 await self.exchange.cancel_order(buy_order.binance_order_id, config.symbol)
                 buy_order.status = OrderStatus.CANCELED
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Не удалось отменить buy-ордер {buy_order.binance_order_id}: {e}")
 
-        sell_price = Decimal(str(binance_order.get('price', db_order.price)))
-        sell_amount = Decimal(str(binance_order.get('amount', cycle.total_base_qty)))
-        total_received = sell_price * sell_amount
+        final_sell_price = Decimal(str(binance_order.get('price') or db_order.price))
+        final_sell_amount = Decimal(str(binance_order.get('amount') or db_order.amount))
+        
+        total_received = final_sell_price * final_sell_amount
         total_spent = Decimal(str(cycle.total_quote_spent or 0.0))
         
         profit = float(total_received - total_spent)

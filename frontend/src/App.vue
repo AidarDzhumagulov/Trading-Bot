@@ -449,6 +449,7 @@ const balanceError = ref('')
 const isCheckingBalance = ref(false)
 
 const dashboard = ref({
+  totalProfitUsdt: 0,
   totalProfit: 0,
   completedCycles: 0,
   livePrice: 0,
