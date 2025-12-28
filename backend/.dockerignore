@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environment
+.venv/
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Alembic
+app/migrations/versions/*.pyc
+
+# Environment
+.env
+.env.local
+
+# OS
+.DS_Store
+*.log
+
+# Documentation
+README.md
+MIGRATION_GUIDE.md

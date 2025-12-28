@@ -1,0 +1,89 @@
+services:
+  db:
+    image: postgres:16
+    container_name: postgres_trading
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+      PGDATA: /data/postgres_trading
+    volumes:
+      - db:/data/postgres_trading
+    command: [ "postgres", "-p", "${DB_PORT}" ]
+    ports:
+      - "${DB_PORT}:${DB_PORT}"
+    networks:
+      - db
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -h 127.0.0.1 -p ${DB_PORT} -U ${DB_USER} -d ${DB_NAME} || exit 1" ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  alembic:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: alembic_migrations
+    working_dir: /app
+    command: [ "alembic", "-c", "alembic.ini", "upgrade", "head" ]
+    env_file:
+      - .env
+    environment:
+      PYTHONPATH: /app
+      DB_HOST: db
+    networks:
+      - db
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: backend_api
+    working_dir: /app
+    command: [ "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8070", "--reload" ]
+    ports:
+      - "8070:8070"
+    env_file:
+      - .env
+    environment:
+      PYTHONPATH: /app
+      DB_HOST: db
+    volumes:
+      - ./backend:/app
+    networks:
+      - db
+    depends_on:
+      alembic:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: frontend_app
+    working_dir: /app
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:8070
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    networks:
+      - db
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+networks:
+  db: { driver: bridge }
+
+volumes:
+  db:

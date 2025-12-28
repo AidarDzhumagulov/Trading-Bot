@@ -1,0 +1,173 @@
+from decimal import Decimal
+from datetime import datetime
+
+from sqlalchemy import select
+
+from app.infrastructure.persistence.sqlalchemy.models import Order, DcaCycle, BotConfig
+from app.infrastructure.persistence.sqlalchemy.models.order import OrderStatus
+from app.infrastructure.persistence.sqlalchemy.models.dca_cycle import CycleStatus
+from app.core.logging import logger
+
+
+class OrderHandler:
+    def __init__(self, session, exchange):
+        self.session = session
+        self.exchange = exchange
+
+    async def handle_filled_order(self, binance_order: dict):
+        binance_id = str(binance_order['id'])
+        logger.info(f"[OrderHandler] Обработка ордера {binance_id}")
+
+        stmt = select(Order).where(Order.binance_order_id == binance_id)
+        result = await self.session.execute(stmt)
+        db_order = result.scalar_one_or_none()
+
+        if not db_order:
+            logger.error(f"[OrderHandler] Ордер {binance_id} не найден в БД. Пропускаем.")
+            all_orders = await self.session.execute(select(Order))
+            logger.info(f"[OrderHandler] Всего ордеров в БД: {len(all_orders.scalars().all())}")
+            return
+
+        if db_order.status == OrderStatus.FILLED:
+            logger.info(f"[OrderHandler] Ордер {binance_id} уже обработан (status=filled)")
+            return
+
+        cycle = await self.session.get(DcaCycle, db_order.cycle_id)
+        config = await self.session.get(BotConfig, cycle.config_id)
+
+        if db_order.order_type == "BUY_SAFETY":
+            await self._handle_buy_fill(db_order, cycle, config, binance_order)
+        elif db_order.order_type == "SELL_TP":
+            await self._handle_tp_fill(db_order, cycle, config, binance_order)
+
+        await self.session.commit()
+
+    async def _handle_buy_fill(self, db_order, cycle, config, binance_order):
+        logger.info(f"[OrderHandler] Обработка BUY ордера {db_order.id}, cycle {cycle.id}")
+        db_order.status = OrderStatus.FILLED
+
+        filled_qty = Decimal(str(binance_order['amount']))
+        logger.info(f"[OrderHandler] Исполнено: {filled_qty}, цена: {db_order.price}")
+        
+        fee_info = binance_order.get('fee', {})
+        fee_qty = Decimal("0")
+        base_currency = config.symbol.split('/')[0].upper()
+        
+        if fee_info:
+            if isinstance(fee_info, dict):
+                fee_cost = Decimal(str(fee_info.get('cost', 0)))
+                fee_currency = fee_info.get('currency', '').upper()
+                
+                if fee_currency == base_currency:
+                    fee_qty = fee_cost
+                elif fee_currency == 'USDT' or fee_currency == 'USD':
+                    if db_order.price > 0:
+                        fee_qty = fee_cost / Decimal(str(db_order.price))
+                    else:
+                        fee_qty = Decimal("0")
+                else:
+                    logger.warning(f"Неизвестная валюта комиссии: {fee_currency}, используем fallback")
+                    fee_rate = Decimal("0.001")
+                    fee_qty = filled_qty * fee_rate
+            else:
+                fee_qty = Decimal(str(fee_info))
+        else:
+            try:
+                await self.exchange.load_markets()
+                market = self.exchange.market(config.symbol)
+                taker_fee = market.get('taker', 0.001)
+                fee_rate = Decimal(str(taker_fee))
+                fee_qty = filled_qty * fee_rate
+            except Exception as e:
+                logger.warning(f"Не удалось получить комиссию с биржи, используем fallback 0.1%: {e}")
+                fee_rate = Decimal("0.001")
+                fee_qty = filled_qty * fee_rate
+        
+        net_qty = filled_qty - fee_qty
+
+        current_base_qty = Decimal(str(cycle.total_base_qty or 0.0))
+        current_quote_spent = Decimal(str(cycle.total_quote_spent or 0.0))
+        
+        new_base_qty = current_base_qty + net_qty
+        new_quote_spent = current_quote_spent + (Decimal(str(db_order.price)) * filled_qty)
+        
+        cycle.total_base_qty = float(new_base_qty)
+        cycle.total_quote_spent = float(new_quote_spent)
+
+        avg_price = new_quote_spent / new_base_qty if new_base_qty > 0 else Decimal("0")
+        cycle.avg_price = float(avg_price)
+        
+        logger.info(f"[OrderHandler] Обновлен цикл {cycle.id}: base_qty={cycle.total_base_qty}, quote_spent={cycle.total_quote_spent}, avg_price={cycle.avg_price}")
+
+        tp_price = avg_price * (Decimal("1") + Decimal(str(config.take_profit_pct)) / Decimal("100"))
+
+        if cycle.current_tp_order_id:
+            try:
+                await self.exchange.cancel_order(cycle.current_tp_order_id, config.symbol)
+            except Exception as e:
+                logger.error(f"Не удалось отменить старый TP: {e}")
+
+        tp_res = await self.exchange.create_order(
+            symbol=config.symbol,
+            type='limit',
+            side='sell',
+            amount=float(cycle.total_base_qty),
+            price=float(tp_price)
+        )
+
+        cycle.current_tp_order_id = tp_res['id']
+
+        next_index = db_order.order_index + 1
+        stmt = select(Order).where(
+            Order.cycle_id == cycle.id,
+            Order.order_index == next_index
+        )
+        res = await self.session.execute(stmt)
+        next_order = res.scalar_one_or_none()
+
+        if next_order:
+            next_binance_res = await self.exchange.create_order(
+                symbol=config.symbol,
+                type='limit',
+                side='buy',
+                amount=float(next_order.amount),
+                price=float(next_order.price)
+            )
+            next_order.binance_order_id = str(next_binance_res['id'])
+            next_order.status = OrderStatus.ACTIVE
+            logger.info(f"[OrderHandler] Следующий ордер создан: binance_id={next_order.binance_order_id}, order_id={next_order.id}")
+
+    async def _handle_tp_fill(self, db_order, cycle, config, binance_order: dict):
+        db_order.status = OrderStatus.FILLED
+        cycle.status = CycleStatus.CLOSED
+        cycle.closed_at = datetime.utcnow()
+
+        stmt = select(Order).where(
+            Order.cycle_id == cycle.id,
+            Order.status == OrderStatus.ACTIVE,
+            Order.order_type == "BUY_SAFETY"
+        )
+        res = await self.session.execute(stmt)
+        active_buys = res.scalars().all()
+
+        for buy_order in active_buys:
+            try:
+                await self.exchange.cancel_order(buy_order.binance_order_id, config.symbol)
+                buy_order.status = OrderStatus.CANCELED
+            except Exception:
+                pass
+
+        sell_price = Decimal(str(binance_order.get('price', db_order.price)))
+        sell_amount = Decimal(str(binance_order.get('amount', cycle.total_base_qty)))
+        total_received = sell_price * sell_amount
+        total_spent = Decimal(str(cycle.total_quote_spent or 0.0))
+        
+        profit = float(total_received - total_spent)
+        cycle.profit_usdt = profit
+
+        logger.info(f"Цикл {cycle.id} успешно закрыт с профитом {profit:.2f} USDT!")
+
+        from app.domain.bot_manager import BotManager
+        
+        manager = BotManager(self.session)
+        await manager.start_first_cycle(config)
