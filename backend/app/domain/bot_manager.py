@@ -219,6 +219,8 @@ class BotManager:
 
             first_order.binance_order_id = str(binance_res['id'])
             first_order.status = OrderStatus.ACTIVE
+            
+            cycle.initial_first_order_price = first_order.price
 
             await self.session.commit()
             logger.info(f"Сетка сдвинута. Новый первый ордер: {binance_res['id']} по цене {first_order.price:.2f}")

@@ -9,6 +9,7 @@ from app.infrastructure.persistence.sqlalchemy.models.order import OrderStatus
 from app.infrastructure.persistence.sqlalchemy.models.dca_cycle import CycleStatus
 from app.shared.exchange_helper import TradingUtils
 from app.core.logging import logger
+from app.domain.bot_manager import BotManager
 
 
 class OrderHandler:
@@ -21,7 +22,11 @@ class OrderHandler:
         binance_id = str(binance_order['id'])
         logger.info(f"[OrderHandler] Обработка ордера {binance_id}")
 
-        stmt = select(Order).where(Order.binance_order_id == binance_id)
+        stmt = (
+            select(Order)
+            .where(Order.binance_order_id == binance_id)
+            .with_for_update()  # Сделал изза рейс кондишона
+        )
         result = await self.session.execute(stmt)
         db_order = result.scalar_one_or_none()
 
@@ -50,7 +55,7 @@ class OrderHandler:
                 return
 
         if db_order.status == OrderStatus.FILLED:
-            logger.info(f"[OrderHandler] Ордер {binance_id} уже обработан (status=filled)")
+            logger.info(f"[OrderHandler] Ордер {binance_id} уже обработан другой задачей (status=filled)")
             return
 
         cycle = await self.session.get(DcaCycle, db_order.cycle_id)
@@ -110,7 +115,9 @@ class OrderHandler:
         current_quote_spent = Decimal(str(cycle.total_quote_spent or 0.0))
         
         new_base_qty = current_base_qty + net_qty
-        new_quote_spent = current_quote_spent + (Decimal(str(db_order.price)) * filled_qty)
+        
+        order_cost = Decimal(str(binance_order.get('cost', db_order.price * float(filled_qty))))
+        new_quote_spent = current_quote_spent + order_cost
         
         cycle.total_base_qty = float(new_base_qty)
         cycle.total_quote_spent = float(new_quote_spent)
@@ -233,39 +240,68 @@ class OrderHandler:
                 logger.info(f"[OrderHandler] Следующий ордер создан: binance_id={next_order.binance_order_id}, order_id={next_order.id}")
 
     async def _handle_tp_fill(self, db_order, cycle, config, binance_order: dict):
-        logger.info(f"[OrderHandler] Обработка исполнения TP ордера {db_order.binance_order_id}")
-        
+        """Обработка исполнения TP-ордера (продажи) с корректным расчетом прибыли
+
+        Важно: Комиссия при продаже должна быть вычтена из полученной суммы
+        """
         db_order.status = OrderStatus.FILLED
         cycle.status = CycleStatus.CLOSED
         cycle.closed_at = datetime.utcnow()
 
-        stmt = select(Order).where(
-            Order.cycle_id == cycle.id,
-            Order.status == OrderStatus.ACTIVE,
-            Order.order_type == "BUY_SAFETY"
+        active_orders = await self.session.execute(
+            select(Order).where(
+                Order.cycle_id == cycle.id,
+                Order.status == OrderStatus.ACTIVE
+            )
         )
-        res = await self.session.execute(stmt)
-        active_buys = res.scalars().all()
-
-        for buy_order in active_buys:
+        for order in active_orders.scalars():
             try:
-                await self.exchange.cancel_order(buy_order.binance_order_id, config.symbol)
-                buy_order.status = OrderStatus.CANCELED
+                await self.exchange.cancel_order(order.binance_order_id, config.symbol)
+                order.status = OrderStatus.CANCELED
             except Exception as e:
-                logger.warning(f"Не удалось отменить buy-ордер {buy_order.binance_order_id}: {e}")
+                logger.error(f"Failed to cancel order {order.binance_order_id}: {e}")
 
-        final_sell_price = Decimal(str(binance_order.get('price') or db_order.price))
-        final_sell_amount = Decimal(str(binance_order.get('amount') or db_order.amount))
-        
-        total_received = final_sell_price * final_sell_amount
+        base_cost = Decimal(str(binance_order.get('cost', 0)))
+
+        if base_cost == 0:
+            price = Decimal(str(binance_order.get('price', db_order.price)))
+            amount = Decimal(str(binance_order.get('amount', db_order.amount)))
+            base_cost = price * amount
+            logger.warning(f"Cost not provided by exchange, calculated: {base_cost}")
+
+        fee_info = binance_order.get('fee', {})
+        fee_cost = Decimal("0")
+
+        if fee_info and isinstance(fee_info, dict):
+            fee_currency = fee_info.get('currency', '').upper()
+
+            if fee_currency == 'USDT' or fee_currency == 'USD':
+                fee_cost = Decimal(str(fee_info.get('cost', 0)))
+                logger.info(f"Sell fee from exchange: {fee_cost} USDT")
+            else:
+                logger.warning(f"Fee currency {fee_currency} not USDT, using 0.1%")
+                fee_cost = base_cost * Decimal("0.001")
+        else:
+            fee_cost = base_cost * Decimal("0.001")
+            logger.warning(f"No fee info from exchange, calculated 0.1%: {fee_cost}")
+
+        total_received = base_cost - fee_cost
+
         total_spent = Decimal(str(cycle.total_quote_spent or 0.0))
-        
+
         profit = float(total_received - total_spent)
         cycle.profit_usdt = profit
 
-        logger.info(f"Цикл {cycle.id} успешно закрыт с профитом {profit:.2f} USDT!")
+        logger.info(
+            f"Cycle {cycle.id} closed: "
+            f"received={float(total_received):.2f} USDT "
+            f"(gross={float(base_cost):.2f}, fee={float(fee_cost):.4f}), "
+            f"spent={float(total_spent):.2f} USDT, "
+            f"profit={profit:.2f} USDT"
+        )
 
-        from app.domain.bot_manager import BotManager
-        
+        await self.session.commit()
+
         manager = BotManager(self.session)
         await manager.start_first_cycle(config)
+        logger.info(f"New cycle started for config {config.id}")

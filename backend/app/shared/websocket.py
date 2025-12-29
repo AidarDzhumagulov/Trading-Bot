@@ -185,7 +185,7 @@ class BinanceWebsocketManager:
 
         if self._last_shift_time:
             time_since_last_shift = time.time() - self._last_shift_time
-            if time_since_last_shift < 30:
+            if time_since_last_shift < 15:
                 return
 
         async with self.session_factory() as session:
@@ -217,11 +217,14 @@ class BinanceWebsocketManager:
             if not config:
                 return
 
-            first_order_price = first_order.price
-            price_increase_pct = ((current_price - first_order_price) / first_order_price) * 100
+            reference_order_price = cycle.initial_first_order_price or first_order.price
+            
+            ideal_entry_price = current_price * (1 - config.first_order_offset_pct / 100)
+            
+            shift_diff_pct = ((ideal_entry_price - reference_order_price) / reference_order_price) * 100
 
-            if price_increase_pct >= config.grid_shift_threshold_pct:
-                logger.info(f"Цена выросла на {price_increase_pct:.2f}% (порог: {config.grid_shift_threshold_pct}%). Сдвигаем сетку...")
+            if shift_diff_pct >= config.grid_shift_threshold_pct:
+                logger.info(f"Сдвиг: Идеальная цена {ideal_entry_price:.2f} выше установленной {reference_order_price:.2f} на {shift_diff_pct:.2f}% (порог: {config.grid_shift_threshold_pct}%)")
                 
                 from app.domain.bot_manager import BotManager
                 

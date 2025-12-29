@@ -1,3 +1,11 @@
+from decimal import Decimal, ROUND_DOWN
+
+
+def truncate_to_precision(value: float, precision: int) -> float:
+    d = Decimal(str(value))
+    quantizer = Decimal('0.1') ** precision
+    return float(d.quantize(quantizer, rounding=ROUND_DOWN))
+
 def calculate_grid(
         current_price: float,
         total_budget: float,
@@ -31,7 +39,7 @@ def calculate_grid(
             "index": i,
             "price": round(order_price, price_precision),
             "amount_usdt": round(order_volume_usdt, 2),
-            "amount_base": round(amount_base, amount_precision)
+            "amount_base": truncate_to_precision(amount_base, amount_precision)
         })
 
     return orders
