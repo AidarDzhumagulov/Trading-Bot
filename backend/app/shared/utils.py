@@ -11,16 +11,18 @@ def calculate_grid(
     first_order_price = current_price * (1 - first_step_pct / 100)
     last_order_price = first_order_price * (1 - grid_length_pct / 100)
 
-    price_step = (first_order_price - last_order_price) / grid_levels if grid_levels > 0 else 0
+    if grid_levels <= 1:
+        price_step = 0
+    else:
+        price_step = (first_order_price - last_order_price) / (grid_levels - 1)
 
     multiplier = 1 + (volume_scale_pct / 100)
-    weights = [multiplier ** i for i in range(grid_levels + 1)]
-    sum_weights = sum(weights)
+    sum_weights = sum([multiplier ** i for i in range(grid_levels)])
 
     first_order_v_usdt = total_budget / sum_weights
 
     orders = []
-    for i in range(grid_levels + 1):
+    for i in range(grid_levels):
         order_price = first_order_price - (i * price_step)
         order_volume_usdt = first_order_v_usdt * (multiplier ** i)
         amount_base = order_volume_usdt / order_price

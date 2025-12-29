@@ -1,5 +1,6 @@
 from decimal import Decimal
 from datetime import datetime
+import ccxt
 
 from sqlalchemy import select, update
 
@@ -132,20 +133,63 @@ class OrderHandler:
             except Exception as e:
                 logger.error(f"Не удалось отменить старый TP: {e}")
 
-        safe_amount = await self.utils.round_amount(config.symbol, cycle.total_base_qty)
-        safe_price = await self.utils.round_price(config.symbol, float(tp_price))
+        base_asset = config.symbol.split('/')[0]
+        amount_to_sell = float(cycle.total_base_qty)
         
-        if not await self.utils.check_min_notional(config.symbol, safe_amount, safe_price):
-            logger.warning(f"[OrderHandler] TP Order too small (amount={safe_amount}, price={safe_price}), waiting for more fills")
+        try:
+            balance = await self.exchange.fetch_free_balance()
+            available_base = balance.get(base_asset, 0.0)
+            
+            amount_to_sell = min(amount_to_sell, float(available_base))
+            
+            if amount_to_sell <= 0:
+                logger.warning(f"[OrderHandler] Недостаточно {base_asset} для создания TP-ордера. Доступно: {available_base}, требуется: {cycle.total_base_qty}")
+                return
+            
+            safe_amount = await self.utils.round_amount_down(config.symbol, amount_to_sell)
+            safe_price = await self.utils.round_price(config.symbol, float(tp_price))
+            
+            if not await self.utils.check_min_notional(config.symbol, safe_amount, safe_price):
+                logger.warning(f"[OrderHandler] TP Order too small (amount={safe_amount}, price={safe_price}), waiting for more fills")
+                return
+            
+            tp_res = await self.exchange.create_order(
+                symbol=config.symbol,
+                type='limit',
+                side='sell',
+                amount=safe_amount,
+                price=safe_price
+            )
+        except ccxt.InsufficientFunds as e:
+            logger.error(f"[OrderHandler] InsufficientFunds при создании TP-ордера: {e}. Пробуем уменьшить amount на минимальный шаг.")
+            try:
+                market = await self.utils.get_market(config.symbol)
+                step_size = market.get('limits', {}).get('amount', {}).get('min', 0.0001)
+                
+                if amount_to_sell > step_size:
+                    safe_amount = await self.utils.round_amount_down(config.symbol, amount_to_sell - step_size)
+                    safe_price = await self.utils.round_price(config.symbol, float(tp_price))
+                    
+                    if await self.utils.check_min_notional(config.symbol, safe_amount, safe_price):
+                        tp_res = await self.exchange.create_order(
+                            symbol=config.symbol,
+                            type='limit',
+                            side='sell',
+                            amount=safe_amount,
+                            price=safe_price
+                        )
+                    else:
+                        logger.error(f"[OrderHandler] Не удалось создать TP-ордер даже после уменьшения amount. Пропускаем.")
+                        return
+                else:
+                    logger.error(f"[OrderHandler] Amount слишком мал для уменьшения. Пропускаем создание TP-ордера.")
+                    return
+            except Exception as retry_error:
+                logger.error(f"[OrderHandler] Ошибка при повторной попытке создания TP-ордера: {retry_error}")
+                return
+        except Exception as e:
+            logger.error(f"[OrderHandler] Неожиданная ошибка при создании TP-ордера: {e}")
             return
-        
-        tp_res = await self.exchange.create_order(
-            symbol=config.symbol,
-            type='limit',
-            side='sell',
-            amount=safe_amount,
-            price=safe_price
-        )
 
         tp_binance_id = str(tp_res['id'])
         cycle.current_tp_order_id = tp_binance_id

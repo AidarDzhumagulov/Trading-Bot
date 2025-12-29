@@ -1,3 +1,5 @@
+import math
+
 class TradingUtils:
     """
     Класс помощник для округления получения данных  и тд
@@ -18,6 +20,16 @@ class TradingUtils:
 
     async def round_amount(self, symbol, amount):
         await self.ensure_markets_loaded()
+        return float(self.exchange.amount_to_precision(symbol, amount))
+
+    async def round_amount_down(self, symbol, amount):
+        await self.ensure_markets_loaded()
+        market = await self.get_market(symbol)
+        precision = market.get('precision', {}).get('amount', 8)
+        if isinstance(precision, int):
+            factor = 10 ** precision
+            truncated = math.floor(amount * factor) / factor
+            return float(truncated)
         return float(self.exchange.amount_to_precision(symbol, amount))
 
     async def round_price(self, symbol, price):
