@@ -6,6 +6,7 @@ from sqlalchemy import select, update
 from app.infrastructure.persistence.sqlalchemy.models import Order, DcaCycle, BotConfig
 from app.infrastructure.persistence.sqlalchemy.models.order import OrderStatus
 from app.infrastructure.persistence.sqlalchemy.models.dca_cycle import CycleStatus
+from app.shared.exchange_helper import TradingUtils
 from app.core.logging import logger
 
 
@@ -13,6 +14,7 @@ class OrderHandler:
     def __init__(self, session, exchange):
         self.session = session
         self.exchange = exchange
+        self.utils = TradingUtils(exchange)
 
     async def handle_filled_order(self, binance_order: dict):
         binance_id = str(binance_order['id'])
@@ -130,12 +132,19 @@ class OrderHandler:
             except Exception as e:
                 logger.error(f"Не удалось отменить старый TP: {e}")
 
+        safe_amount = await self.utils.round_amount(config.symbol, cycle.total_base_qty)
+        safe_price = await self.utils.round_price(config.symbol, float(tp_price))
+        
+        if not await self.utils.check_min_notional(config.symbol, safe_amount, safe_price):
+            logger.warning(f"[OrderHandler] TP Order too small (amount={safe_amount}, price={safe_price}), waiting for more fills")
+            return
+        
         tp_res = await self.exchange.create_order(
             symbol=config.symbol,
             type='limit',
             side='sell',
-            amount=float(cycle.total_base_qty),
-            price=float(tp_price)
+            amount=safe_amount,
+            price=safe_price
         )
 
         tp_binance_id = str(tp_res['id'])
@@ -146,8 +155,8 @@ class OrderHandler:
             binance_order_id=tp_binance_id,
             order_type="SELL_TP",
             order_index=-1,
-            price=float(tp_price),
-            amount=float(cycle.total_base_qty),
+            price=safe_price,
+            amount=safe_amount,
             status=OrderStatus.ACTIVE
         )
         self.session.add(new_tp_order)
@@ -162,16 +171,22 @@ class OrderHandler:
         next_order = res.scalar_one_or_none()
 
         if next_order:
-            next_binance_res = await self.exchange.create_order(
-                symbol=config.symbol,
-                type='limit',
-                side='buy',
-                amount=float(next_order.amount),
-                price=float(next_order.price)
-            )
-            next_order.binance_order_id = str(next_binance_res['id'])
-            next_order.status = OrderStatus.ACTIVE
-            logger.info(f"[OrderHandler] Следующий ордер создан: binance_id={next_order.binance_order_id}, order_id={next_order.id}")
+            next_safe_amount = await self.utils.round_amount(config.symbol, next_order.amount)
+            next_safe_price = await self.utils.round_price(config.symbol, next_order.price)
+            
+            if not await self.utils.check_min_notional(config.symbol, next_safe_amount, next_safe_price):
+                logger.warning(f"[OrderHandler] Next order too small (amount={next_safe_amount}, price={next_safe_price}), skipping")
+            else:
+                next_binance_res = await self.exchange.create_order(
+                    symbol=config.symbol,
+                    type='limit',
+                    side='buy',
+                    amount=next_safe_amount,
+                    price=next_safe_price
+                )
+                next_order.binance_order_id = str(next_binance_res['id'])
+                next_order.status = OrderStatus.ACTIVE
+                logger.info(f"[OrderHandler] Следующий ордер создан: binance_id={next_order.binance_order_id}, order_id={next_order.id}")
 
     async def _handle_tp_fill(self, db_order, cycle, config, binance_order: dict):
         logger.info(f"[OrderHandler] Обработка исполнения TP ордера {db_order.binance_order_id}")

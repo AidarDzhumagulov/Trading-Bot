@@ -4,7 +4,9 @@ def calculate_grid(
         grid_levels: int,
         grid_length_pct: float,
         first_step_pct: float,
-        volume_scale_pct: float
+        volume_scale_pct: float,
+        amount_precision: int = 4,
+        price_precision: int = 2
 ):
     first_order_price = current_price * (1 - first_step_pct / 100)
     last_order_price = first_order_price * (1 - grid_length_pct / 100)
@@ -21,12 +23,13 @@ def calculate_grid(
     for i in range(grid_levels + 1):
         order_price = first_order_price - (i * price_step)
         order_volume_usdt = first_order_v_usdt * (multiplier ** i)
+        amount_base = order_volume_usdt / order_price
 
         orders.append({
             "index": i,
-            "price": round(order_price, 2),
+            "price": round(order_price, price_precision),
             "amount_usdt": round(order_volume_usdt, 2),
-            "amount_base": order_volume_usdt / order_price
+            "amount_base": round(amount_base, amount_precision)
         })
 
     return orders

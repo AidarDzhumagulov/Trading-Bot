@@ -10,6 +10,7 @@ from app.shared.utils import calculate_grid
 from app.infrastructure.persistence.sqlalchemy.models.order import OrderStatus
 from app.shared.websocket import BinanceWebsocketManager
 from app.shared.websocket_registry import websocket_registry
+from app.shared.exchange_helper import TradingUtils
 from app.core.dependencies import get_session_factory
 from app.core.logging import logger
 
@@ -47,13 +48,19 @@ class BotManager:
             ticker = await exchange.fetch_ticker(config.symbol)
             current_price = ticker['last']
 
+            utils = TradingUtils(exchange)
+            amount_precision = await utils.get_amount_precision(config.symbol)
+            price_precision = await utils.get_price_precision(config.symbol)
+
             grid_data = calculate_grid(
                 current_price=current_price,
                 total_budget=config.total_budget,
                 grid_levels=config.safety_orders_count,
                 grid_length_pct=config.grid_length_pct,
                 first_step_pct=config.first_order_offset_pct,
-                volume_scale_pct=config.volume_scale_pct
+                volume_scale_pct=config.volume_scale_pct,
+                amount_precision=amount_precision,
+                price_precision=price_precision
             )
 
             new_cycle = DcaCycle(config_id=config.id, status=CycleStatus.OPEN)
@@ -91,12 +98,18 @@ class BotManager:
             
             await asyncio.sleep(1)
             
+            safe_amount = await utils.round_amount(config.symbol, first_order.amount)
+            safe_price = await utils.round_price(config.symbol, first_order.price)
+            
+            if not await utils.check_min_notional(config.symbol, safe_amount, safe_price):
+                raise ValueError(f"Order amount {safe_amount} * price {safe_price} is below minimum notional for {config.symbol}")
+            
             binance_res = await exchange.create_order(
                 symbol=config.symbol,
                 type='limit',
                 side='buy',
-                amount=first_order.amount,
-                price=first_order.price
+                amount=safe_amount,
+                price=safe_price
             )
 
             first_order.binance_order_id = str(binance_res['id'])
@@ -158,13 +171,19 @@ class BotManager:
             
             await self.session.flush()
 
+            utils = TradingUtils(exchange)
+            amount_precision = await utils.get_amount_precision(config.symbol)
+            price_precision = await utils.get_price_precision(config.symbol)
+
             grid_data = calculate_grid(
                 current_price=current_price,
                 total_budget=config.total_budget,
                 grid_levels=config.safety_orders_count,
                 grid_length_pct=config.grid_length_pct,
                 first_step_pct=config.first_order_offset_pct,
-                volume_scale_pct=config.volume_scale_pct
+                volume_scale_pct=config.volume_scale_pct,
+                amount_precision=amount_precision,
+                price_precision=price_precision
             )
 
             db_orders = []
@@ -184,12 +203,18 @@ class BotManager:
 
             first_order = db_orders[0]
             
+            safe_amount = await utils.round_amount(config.symbol, first_order.amount)
+            safe_price = await utils.round_price(config.symbol, first_order.price)
+            
+            if not await utils.check_min_notional(config.symbol, safe_amount, safe_price):
+                raise ValueError(f"Order amount {safe_amount} * price {safe_price} is below minimum notional for {config.symbol}")
+            
             binance_res = await exchange.create_order(
                 symbol=config.symbol,
                 type='limit',
                 side='buy',
-                amount=first_order.amount,
-                price=first_order.price
+                amount=safe_amount,
+                price=safe_price
             )
 
             first_order.binance_order_id = str(binance_res['id'])

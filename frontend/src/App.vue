@@ -170,18 +170,18 @@
             <div>
               <label class="block text-sm font-medium text-slate-300 mb-2">
                 Масштабирование объема (%)
-                <span class="text-slate-500 text-xs ml-1">(Множитель объема для каждого ордера)</span>
+                <span class="text-slate-500 text-xs ml-1">(Процент увеличения объема каждого следующего ордера)</span>
               </label>
               <input
                   v-model.number="config.scaleStepVolume"
                   type="number"
-                  min="100"
+                  min="0"
                   step="10"
-                  placeholder="например, 150"
+                  placeholder="например, 50"
                   class="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition"
               />
               <p class="text-slate-500 text-xs mt-1">
-                100% = тот же объем, 150% = объем увеличивается в 1.5 раза на каждый ордер
+                0% = тот же объем, 50% = увеличение в 1.5 раза, 100% = увеличение в 2 раза
               </p>
             </div>
 
@@ -436,7 +436,7 @@ const config = ref({
   gridLength: 5.0,
   firstOrderOffset: 0.05,
   safetyOrdersCount: 5,
-  scaleStepVolume: 150,
+  scaleStepVolume: 0,
   priceStep: 2.0,
   takeProfit: 2.0
 })
