@@ -24,7 +24,7 @@ class BotManager:
             'apiKey': config.binance_api_key,
             'secret': config.binance_api_secret,
         })
-        # exchange.set_sandbox_mode(True)
+        exchange.set_sandbox_mode(True)
 
         try:
             balance = await exchange.fetch_balance()
@@ -40,10 +40,13 @@ class BotManager:
                 )
             
             if config.total_budget > free_usdt:
-                raise ValueError(
+                logger.warning(
                     f"Budget ({config.total_budget:.2f} USDT) exceeds available balance "
-                    f"({free_usdt:.2f} USDT)"
+                    f"({free_usdt:.2f} USDT). Using available balance."
                 )
+                effective_budget = free_usdt * 0.99  # Оставляем 1% запас
+            else:
+                effective_budget = config.total_budget
             
             ticker = await exchange.fetch_ticker(config.symbol)
             current_price = ticker['last']
@@ -54,7 +57,7 @@ class BotManager:
 
             grid_data = calculate_grid(
                 current_price=current_price,
-                total_budget=config.total_budget,
+                total_budget=effective_budget,
                 grid_levels=config.safety_orders_count,
                 grid_length_pct=config.grid_length_pct,
                 first_step_pct=config.first_order_offset_pct,
@@ -62,6 +65,8 @@ class BotManager:
                 amount_precision=amount_precision,
                 price_precision=price_precision
             )
+
+            logger.info(f"Starting cycle with budget: {effective_budget:.2f} USDT (available: {free_usdt:.2f})")
 
             new_cycle = DcaCycle(config_id=config.id, status=CycleStatus.OPEN)
             self.session.add(new_cycle)
@@ -134,7 +139,7 @@ class BotManager:
             'apiKey': config.binance_api_key,
             'secret': config.binance_api_secret,
         })
-        # exchange.set_sandbox_mode(True)
+        exchange.set_sandbox_mode(True)
 
         try:
             stmt = select(Order).where(

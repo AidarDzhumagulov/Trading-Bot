@@ -261,6 +261,15 @@ class OrderHandler:
             except Exception as e:
                 logger.error(f"Failed to cancel order {order.binance_order_id}: {e}")
 
+        logger.info(f"TP Order details from exchange:")
+        logger.info(f"  id: {binance_order.get('id')}")
+        logger.info(f"  price: {binance_order.get('price')}")
+        logger.info(f"  amount: {binance_order.get('amount')}")
+        logger.info(f"  cost: {binance_order.get('cost')}")
+        logger.info(f"  fee: {binance_order.get('fee')}")
+        logger.info(f"  DB order price: {db_order.price}")
+        logger.info(f"  DB order amount: {db_order.amount}")
+
         base_cost = Decimal(str(binance_order.get('cost', 0)))
 
         if base_cost == 0:
@@ -292,12 +301,28 @@ class OrderHandler:
         profit = float(total_received - total_spent)
         cycle.profit_usdt = profit
 
+        expected_min_profit_pct = config.take_profit_pct * 0.5  # Минимум половина от TP
+        actual_profit_pct = (profit / float(total_spent)) * 100 if total_spent > 0 else 0
+
+        if actual_profit_pct < expected_min_profit_pct:
+            logger.error(
+                f"⚠️ ANOMALY DETECTED! Cycle {cycle.id} closed with suspiciously low profit: "
+                f"profit={profit:.4f} USDT ({actual_profit_pct:.2f}%), "
+                f"expected at least {expected_min_profit_pct:.2f}%"
+            )
+            logger.error(
+                f"Details: spent={float(total_spent):.4f}, "
+                f"received={float(total_received):.4f}, "
+                f"avg_price={cycle.avg_price:.2f}, "
+                f"tp_price={db_order.price:.2f}"
+            )
+
         logger.info(
             f"Cycle {cycle.id} closed: "
             f"received={float(total_received):.2f} USDT "
             f"(gross={float(base_cost):.2f}, fee={float(fee_cost):.4f}), "
             f"spent={float(total_spent):.2f} USDT, "
-            f"profit={profit:.2f} USDT"
+            f"profit={profit:.2f} USDT ({actual_profit_pct:.2f}%)"
         )
 
         await self.session.commit()

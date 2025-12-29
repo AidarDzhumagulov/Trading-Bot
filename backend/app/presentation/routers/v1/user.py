@@ -13,7 +13,7 @@ async def get_binance_balance(data: BalanceCheckRequest):
     })
 
     try:
-        # exchange.set_sandbox_mode(True)
+        exchange.set_sandbox_mode(True)
         balance = await exchange.fetch_balance()
         usdt_info = balance.get('USDT', {})
 

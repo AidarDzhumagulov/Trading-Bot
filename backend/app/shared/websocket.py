@@ -42,7 +42,7 @@ class BinanceWebsocketManager:
             'secret': self.api_secret,
             'enableRateLimit': True,
         })
-        # self.exchange.set_sandbox_mode(True)
+        self.exchange.set_sandbox_mode(True)
         self._is_running = True
 
     async def run_forever(self):
@@ -116,18 +116,37 @@ class BinanceWebsocketManager:
         order_id_str = str(order_id)
         logger.info(f"[process_order] Обработка ордера {order_id_str}")
         logger.debug(f"[process_order] Order данные: symbol={order.get('symbol')}, amount={order.get('amount')}, filled={order.get('filled')}, price={order.get('price')}")
+
+        logger.info(f"[process_order] Raw order from exchange:")
+        logger.info(f"  filled: {order.get('filled')}")
+        logger.info(f"  amount: {order.get('amount')}")
+        logger.info(f"  average: {order.get('average')}")
+        logger.info(f"  price: {order.get('price')}")
+        logger.info(f"  cost: {order.get('cost')}")
+        logger.info(f"  fee: {order.get('fee')}")
         
         async with self.session_factory() as session:
+            filled_amount = order.get('filled') or order.get('amount')
+            avg_price = order.get('average') or order.get('price')
+
+            order_cost = order.get('cost')
+            if order_cost is None or order_cost == 0:
+                order_cost = filled_amount * avg_price
+                logger.warning(f"[process_order] Cost not in order, calculated: {order_cost}")
+
             binance_order = {
                 'id': order_id_str,
                 'symbol': order.get('symbol', self.symbol),
                 'status': 'closed',
-                'amount': order.get('filled') or order.get('amount'),
-                'price': order.get('average') or order.get('price'),
-                'filled': order.get('filled') or order.get('amount'),
+                'amount': filled_amount,
+                'price': avg_price,
+                'filled': filled_amount,
+                'cost': order_cost,
                 'fee': order.get('fee', {})
             }
-            
+
+            logger.info(f"[process_order] Prepared binance_order: cost={order_cost}, amount={filled_amount}, price={avg_price}")
+
             handler = OrderHandler(session, self.exchange)
             await handler.handle_filled_order(binance_order)
 
