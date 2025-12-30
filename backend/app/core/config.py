@@ -13,7 +13,7 @@ class Settings(BaseSettings):
         case_sensitive=True
     )
 
-    environment: str = "Development"
+    ENVIRONMENT: str = "DEV"
 
     DB_HOST: str
     DB_PORT: int

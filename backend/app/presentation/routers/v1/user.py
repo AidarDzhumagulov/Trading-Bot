@@ -2,6 +2,7 @@ from ccxt import async_support
 from fastapi import APIRouter, HTTPException
 
 from app.presentation.schemas.user import BalanceResponse, BalanceCheckRequest
+from app.core.config import settings
 
 router = APIRouter(prefix="/user", tags=["user"])
 
@@ -13,7 +14,8 @@ async def get_binance_balance(data: BalanceCheckRequest):
     })
 
     try:
-        # exchange.set_sandbox_mode(True)
+        if settings.ENVIRONMENT == "DEV":
+            exchange.set_sandbox_mode(True)
         balance = await exchange.fetch_balance()
         usdt_info = balance.get('USDT', {})
 

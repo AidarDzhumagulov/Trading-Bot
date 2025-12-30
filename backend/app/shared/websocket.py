@@ -11,6 +11,7 @@ from app.infrastructure.persistence.sqlalchemy.models import DcaCycle, Order, Bo
 from app.infrastructure.persistence.sqlalchemy.models.dca_cycle import CycleStatus
 from app.infrastructure.persistence.sqlalchemy.models.order import OrderStatus
 from app.core.logging import logger
+from app.core.config import settings
 
 if TYPE_CHECKING:
     from app.domain.order_handler import OrderHandler
@@ -42,7 +43,8 @@ class BinanceWebsocketManager:
             'secret': self.api_secret,
             'enableRateLimit': True,
         })
-        # self.exchange.set_sandbox_mode(True)
+        if settings.ENVIRONMENT == "DEV":
+            self.exchange.set_sandbox_mode(True)
         self._is_running = True
 
     async def run_forever(self):

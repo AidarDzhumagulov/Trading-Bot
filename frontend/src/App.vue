@@ -414,6 +414,7 @@
 
 <script setup>
 import {computed, onMounted, onUnmounted, ref} from 'vue'
+import {loadConfigId, saveConfigId, clearConfigId} from './storage.js'
 import {
   ActivityIcon,
   AlertOctagonIcon,
@@ -639,6 +640,7 @@ const startBot = async () => {
     console.log('Creating bot configuration...')
     const setupResponse = await setupBotConfig(config.value)
     configId.value = setupResponse.id
+    saveConfigId(configId.value)
     console.log('Config created:', setupResponse)
 
     console.log('Starting bot...')
@@ -682,6 +684,7 @@ const emergencyStop = async () => {
 
     configId.value = null
     cycleId.value = null
+    clearConfigId()
   } catch (error) {
     console.error('Failed to stop bot:', error)
     errorMessage.value = error.message
@@ -698,9 +701,23 @@ const resetCycle = () => {
   dashboard.value.currentCycle.investedCapital = 0
 }
 
-onMounted(() => {
-  if (botStatus.value === 'active' && configId.value) {
-    startStatsPolling()
+onMounted(async () => {
+  const savedConfigId = loadConfigId()
+  if (savedConfigId) {
+    try {
+      configId.value = savedConfigId
+      const stats = await getStats(savedConfigId)
+      if (stats.currentCycle) {
+        botStatus.value = 'active'
+        startStatsPolling()
+      } else {
+        botStatus.value = 'waiting'
+      }
+    } catch (error) {
+      console.warn('Failed to load saved config:', error)
+      clearConfigId()
+      configId.value = null
+    }
   }
 })
 

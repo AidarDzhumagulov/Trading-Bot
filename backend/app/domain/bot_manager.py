@@ -13,6 +13,7 @@ from app.shared.websocket_registry import websocket_registry
 from app.shared.exchange_helper import TradingUtils
 from app.core.dependencies import get_session_factory
 from app.core.logging import logger
+from app.core.config import settings
 
 
 class BotManager:
@@ -24,7 +25,8 @@ class BotManager:
             'apiKey': config.binance_api_key,
             'secret': config.binance_api_secret,
         })
-        # exchange.set_sandbox_mode(True)
+        if settings.ENVIRONMENT == "DEV":
+            exchange.set_sandbox_mode(True)
 
         try:
             balance = await exchange.fetch_balance()
@@ -139,7 +141,8 @@ class BotManager:
             'apiKey': config.binance_api_key,
             'secret': config.binance_api_secret,
         })
-        # exchange.set_sandbox_mode(True)
+        if settings.ENVIRONMENT == "DEV":
+            exchange.set_sandbox_mode(True)
 
         try:
             stmt = select(Order).where(
