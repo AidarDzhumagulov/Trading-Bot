@@ -24,7 +24,7 @@ class BotManager:
             'apiKey': config.binance_api_key,
             'secret': config.binance_api_secret,
         })
-        exchange.set_sandbox_mode(True)
+        # exchange.set_sandbox_mode(True)
 
         try:
             balance = await exchange.fetch_balance()
@@ -139,7 +139,7 @@ class BotManager:
             'apiKey': config.binance_api_key,
             'secret': config.binance_api_secret,
         })
-        exchange.set_sandbox_mode(True)
+        # exchange.set_sandbox_mode(True)
 
         try:
             stmt = select(Order).where(

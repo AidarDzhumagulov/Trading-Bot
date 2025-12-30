@@ -42,7 +42,7 @@ class BinanceWebsocketManager:
             'secret': self.api_secret,
             'enableRateLimit': True,
         })
-        self.exchange.set_sandbox_mode(True)
+        # self.exchange.set_sandbox_mode(True)
         self._is_running = True
 
     async def run_forever(self):

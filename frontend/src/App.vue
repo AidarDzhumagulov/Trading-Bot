@@ -454,12 +454,17 @@ const dashboard = ref({
   completedCycles: 0,
   livePrice: 0,
   priceChange24h: 0,
+  currentMarketPrice: 0,
   currentCycle: {
     averagePrice: 0,
     takeProfitPrice: 0,
     totalVolume: 0,
     investedCapital: 0,
-    filledOrders: 0
+    filledOrders: 0,
+    filledOrdersCount: 0,
+    tpOrderPrice: 0,
+    tpOrderVolume: 0,
+    totalQuoteSpent: 0,
   }
 })
 
