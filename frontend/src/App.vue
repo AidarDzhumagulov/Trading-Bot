@@ -414,7 +414,7 @@
 
 <script setup>
 import {computed, onMounted, onUnmounted, ref} from 'vue'
-import {loadConfigId, saveConfigId, clearConfigId} from './storage.js'
+import {loadConfigId, saveConfigId, clearConfigId, loadConfig, saveConfig} from './storage.js'
 import {
   ActivityIcon,
   AlertOctagonIcon,
@@ -641,6 +641,7 @@ const startBot = async () => {
     const setupResponse = await setupBotConfig(config.value)
     configId.value = setupResponse.id
     saveConfigId(configId.value)
+    saveConfig(config.value)
     console.log('Config created:', setupResponse)
 
     console.log('Starting bot...')
@@ -703,15 +704,23 @@ const resetCycle = () => {
 
 onMounted(async () => {
   const savedConfigId = loadConfigId()
+  const savedConfig = loadConfig()
+  
   if (savedConfigId) {
     try {
       configId.value = savedConfigId
+      
+      if (savedConfig) {
+        config.value = savedConfig
+      }
+      
       const stats = await getStats(savedConfigId)
       if (stats.currentCycle) {
         botStatus.value = 'active'
         startStatsPolling()
       } else {
         botStatus.value = 'waiting'
+        await updateStats()
       }
     } catch (error) {
       console.warn('Failed to load saved config:', error)
