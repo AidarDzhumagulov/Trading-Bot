@@ -1,3 +1,4 @@
+import asyncio
 from decimal import Decimal
 from datetime import datetime
 import ccxt
@@ -10,6 +11,7 @@ from app.infrastructure.persistence.sqlalchemy.models.dca_cycle import CycleStat
 from app.shared.exchange_helper import TradingUtils
 from app.core.logging import logger
 from app.domain.bot_manager import BotManager
+from app.shared.websocket_registry import websocket_registry
 
 
 class OrderHandler:
@@ -153,7 +155,7 @@ class OrderHandler:
                 logger.warning(f"[OrderHandler] Недостаточно {base_asset} для создания TP-ордера. Доступно: {available_base}, требуется: {cycle.total_base_qty}")
                 return
             
-            safe_amount = await self.utils.round_amount_down(config.symbol, amount_to_sell)
+            safe_amount = await self.utils.round_amount(config.symbol, amount_to_sell)
             safe_price = await self.utils.round_price(config.symbol, float(tp_price))
             
             if not await self.utils.check_min_notional(config.symbol, safe_amount, safe_price):
@@ -174,7 +176,7 @@ class OrderHandler:
                 step_size = market.get('limits', {}).get('amount', {}).get('min', 0.0001)
                 
                 if amount_to_sell > step_size:
-                    safe_amount = await self.utils.round_amount_down(config.symbol, amount_to_sell - step_size)
+                    safe_amount = await self.utils.round_amount(config.symbol, amount_to_sell - step_size)
                     safe_price = await self.utils.round_price(config.symbol, float(tp_price))
                     
                     if await self.utils.check_min_notional(config.symbol, safe_amount, safe_price):
@@ -214,9 +216,15 @@ class OrderHandler:
         logger.info(f"[OrderHandler] TP-ордер создан и сохранен в БД: binance_id={tp_binance_id}, price={tp_price:.2f}, amount={cycle.total_base_qty}")
 
         next_index = db_order.order_index + 1
-        stmt = select(Order).where(
-            Order.cycle_id == cycle.id,
-            Order.order_index == next_index
+        stmt = (
+            select(Order)
+            .where(
+                Order.cycle_id == cycle.id,
+                Order.order_index == next_index,
+                Order.order_type == 'BUY_SAFETY'
+            )
+            .order_by(Order.created_at.desc())
+            .limit(1)
         )
         res = await self.session.execute(stmt)
         next_order = res.scalar_one_or_none()
@@ -326,6 +334,13 @@ class OrderHandler:
         )
 
         await self.session.commit()
+        old_ws_manager = websocket_registry.get(config.id)
+        if old_ws_manager:
+            logger.info(f"Stopping old WebSocket manager for config {config.id}")
+            await old_ws_manager.stop()
+            await websocket_registry.remove(config.id)
+            await asyncio.sleep(0.5)
+            logger.info(f"Old WebSocket manager stopped")
 
         manager = BotManager(self.session)
         await manager.start_first_cycle(config)

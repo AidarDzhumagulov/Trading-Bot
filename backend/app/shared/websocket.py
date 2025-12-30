@@ -36,6 +36,7 @@ class BinanceWebsocketManager:
         self.exchange = None
         self._is_running = False
         self._last_shift_time = None
+        self._shift_lock = asyncio.Lock()
 
     async def connect(self):
         self.exchange = ccxtpro.binance({
@@ -209,51 +210,57 @@ class BinanceWebsocketManager:
             if time_since_last_shift < 15:
                 return
 
-        async with self.session_factory() as session:
-            stmt = select(DcaCycle).where(
-                DcaCycle.config_id == self.config_id,
-                DcaCycle.status == CycleStatus.OPEN
-            )
-            result = await session.execute(stmt)
-            cycle = result.scalar_one_or_none()
+        async with self._shift_lock:
+            if self._last_shift_time:
+                time_since_last_shift = time.time() - self._last_shift_time
+                if time_since_last_shift < 15:
+                    return
 
-            if not cycle:
-                return
+            async with self.session_factory() as session:
+                stmt = select(DcaCycle).where(
+                    DcaCycle.config_id == self.config_id,
+                    DcaCycle.status == CycleStatus.OPEN
+                )
+                result = await session.execute(stmt)
+                cycle = result.scalar_one_or_none()
 
-            stmt = select(Order).where(
-                Order.cycle_id == cycle.id,
-                Order.order_index == 0,
-                Order.order_type == 'BUY_SAFETY'
-            )
-            result = await session.execute(stmt)
-            first_order = result.scalar_one_or_none()
+                if not cycle:
+                    return
 
-            if not first_order:
-                return
+                stmt = select(Order).where(
+                    Order.cycle_id == cycle.id,
+                    Order.order_index == 0,
+                    Order.order_type == 'BUY_SAFETY'
+                ).order_by(Order.created_at.desc()).limit(1)
+                result = await session.execute(stmt)
+                first_order = result.scalar_one_or_none()
 
-            if first_order.status == OrderStatus.FILLED:
-                return
+                if not first_order:
+                    return
 
-            config = await session.get(BotConfig, self.config_id)
-            if not config:
-                return
+                if first_order.status == OrderStatus.FILLED:
+                    return
 
-            reference_order_price = cycle.initial_first_order_price or first_order.price
-            
-            ideal_entry_price = current_price * (1 - config.first_order_offset_pct / 100)
-            
-            shift_diff_pct = ((ideal_entry_price - reference_order_price) / reference_order_price) * 100
+                config = await session.get(BotConfig, self.config_id)
+                if not config:
+                    return
 
-            if shift_diff_pct >= config.grid_shift_threshold_pct:
-                logger.info(f"Сдвиг: Идеальная цена {ideal_entry_price:.2f} выше установленной {reference_order_price:.2f} на {shift_diff_pct:.2f}% (порог: {config.grid_shift_threshold_pct}%)")
-                
-                from app.domain.bot_manager import BotManager
-                
-                manager = BotManager(session)
-                await manager.shift_grid(cycle, config, current_price)
-                
-                self._last_shift_time = time.time()
-                logger.info(f"Сетка успешно сдвинута для цикла {cycle.id}")
+                reference_order_price = cycle.initial_first_order_price or first_order.price
+
+                ideal_entry_price = current_price * (1 - config.first_order_offset_pct / 100)
+
+                shift_diff_pct = ((ideal_entry_price - reference_order_price) / reference_order_price) * 100
+
+                if shift_diff_pct >= config.grid_shift_threshold_pct:
+                    logger.info(f"Сдвиг: Идеальная цена {ideal_entry_price:.2f} выше установленной {reference_order_price:.2f} на {shift_diff_pct:.2f}% (порог: {config.grid_shift_threshold_pct}%)")
+
+                    from app.domain.bot_manager import BotManager
+
+                    manager = BotManager(session)
+                    await manager.shift_grid(cycle, config, current_price)
+
+                    self._last_shift_time = time.time()
+                    logger.info(f"Сетка успешно сдвинута для цикла {cycle.id}")
 
     async def stop(self):
         self._is_running = False

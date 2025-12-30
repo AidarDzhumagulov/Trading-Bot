@@ -1,8 +1,9 @@
+from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Optional
 from uuid import UUID, uuid4
 
-from sqlalchemy import ForeignKey, String
+from sqlalchemy import ForeignKey, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -30,5 +31,7 @@ class Order(Base):
     price: Mapped[float] = mapped_column(nullable=False)
     amount: Mapped[float] = mapped_column(nullable=False)
     status: Mapped[OrderStatus] = mapped_column(default=OrderStatus.PENDING)
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     cycle: Mapped["DcaCycle"] = relationship(back_populates="orders")
+

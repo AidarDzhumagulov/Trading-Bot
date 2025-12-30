@@ -90,7 +90,17 @@ class BotManager:
             first_order = db_orders[0]
             
             new_cycle.initial_first_order_price = first_order.price
-            
+
+            old_ws_manager = websocket_registry.get(config.id)
+            if old_ws_manager:
+                logger.warning(
+                    f" Old WebSocket still running for config {config.id}, stopping..."
+                )
+                await old_ws_manager.stop()
+                await websocket_registry.remove(config.id)
+                await asyncio.sleep(0.5)
+                logger.info(f"Old WebSocket stopped successfully")
+
             ws_manager = BinanceWebsocketManager(
                 api_key=config.binance_api_key,
                 api_secret=config.binance_api_secret,
@@ -98,8 +108,8 @@ class BotManager:
                 config_id=config.id,
                 symbol=config.symbol
             )
-            
-            websocket_registry.add(config.id, ws_manager)
+
+            await websocket_registry.add(config.id, ws_manager)
             asyncio.create_task(ws_manager.run_forever())
             logger.info(f"WebSocket Manager запущен для config_id: {config.id}")
             
@@ -148,21 +158,26 @@ class BotManager:
             stmt = select(Order).where(
                 Order.cycle_id == cycle.id,
                 Order.order_type == 'BUY_SAFETY',
-                Order.status.in_([OrderStatus.PENDING, OrderStatus.PARTIAL])
+                Order.status.in_([OrderStatus.PENDING, OrderStatus.PARTIAL, OrderStatus.ACTIVE])
             )
             result = await self.session.execute(stmt)
-            active_orders = result.scalars().all()
+            orders_to_cancel = result.scalars().all()
 
-            for order in active_orders:
+            binance_ids_to_cancel = set()
+            for order in orders_to_cancel:
                 if order.binance_order_id:
-                    try:
-                        await exchange.cancel_order(order.binance_order_id, config.symbol)
-                        logger.info(f"Отменен ордер {order.binance_order_id} (index: {order.order_index})")
-                    except Exception as e:
-                        logger.warning(f"Не удалось отменить ордер {order.binance_order_id}: {e}")
-                    
-                    order.status = OrderStatus.CANCELED
-                    order.binance_order_id = None
+                    binance_ids_to_cancel.add(order.binance_order_id)
+
+            for binance_id in binance_ids_to_cancel:
+                try:
+                    await exchange.cancel_order(binance_id, config.symbol)
+                    logger.info(f"Отменен ордер {binance_id}")
+                except Exception as e:
+                    logger.warning(f"Не удалось отменить ордер {binance_id}: {e}")
+
+            for order in orders_to_cancel:
+                order.status = OrderStatus.CANCELED
+                order.binance_order_id = None
 
             await self.session.flush()
 
@@ -173,6 +188,8 @@ class BotManager:
             )
             result = await self.session.execute(stmt)
             orders_to_delete = result.scalars().all()
+
+            logger.info(f"Удаляем {len(orders_to_delete)} незаполненных ордеров")
             
             for order in orders_to_delete:
                 await self.session.delete(order)
