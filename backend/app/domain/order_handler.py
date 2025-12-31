@@ -143,61 +143,130 @@ class OrderHandler:
                 logger.error(f"Не удалось отменить старый TP: {e}")
 
         base_asset = config.symbol.split('/')[0]
-        amount_to_sell = float(cycle.total_base_qty)
         
         try:
             balance = await self.exchange.fetch_free_balance()
             available_base = balance.get(base_asset, 0.0)
             
-            amount_to_sell = min(amount_to_sell, float(available_base))
+            expected_amount = float(cycle.total_base_qty)
+            
+            logger.info(
+                f"[OrderHandler] Проверка баланса: "
+                f"доступно={available_base:.8f} {base_asset}, "
+                f"ожидается={expected_amount:.8f} {base_asset}"
+            )
+            
+            if available_base <= 0:
+                logger.error(
+                    f"[OrderHandler] Нет доступного {base_asset} для TP-ордера. "
+                    f"Ожидается: {expected_amount:.8f}, Доступно: {available_base:.8f}"
+                )
+                return
+            
+            if expected_amount > 0:
+                deviation = available_base - expected_amount
+                deviation_pct = abs(deviation) / expected_amount * 100
+                
+                logger.info(f"[OrderHandler] Отклонение баланса: {deviation:+.8f} {base_asset} ({deviation_pct:.2f}%)")
+                
+                if deviation_pct > 5.0:
+                    logger.error(
+                        f"[OrderHandler] КРИТИЧЕСКОЕ несоответствие баланса! "
+                        f"Доступно: {available_base:.8f}, Ожидается: {expected_amount:.8f}, "
+                        f"Отклонение: {deviation_pct:.2f}% (порог: 5.0%)"
+                    )
+                    logger.error(
+                        f"[OrderHandler] Возможные причины: "
+                        f"1) Ручной вывод/пополнение, "
+                        f"2) Несколько ботов на одном аккаунте, "
+                        f"3) Ошибка данных API"
+                    )
+                    return
+                
+                elif deviation_pct > 1.0:
+                    logger.warning(
+                        f"[OrderHandler] Обнаружено умеренное несоответствие баланса "
+                        f"(отклонение: {deviation_pct:.2f}%). Используем консервативный подход."
+                    )
+            
+            if expected_amount > 0:
+                if abs(available_base - expected_amount) / expected_amount < 0.001:  # <0.1%
+                    amount_to_sell = available_base
+                    logger.info(f"[OrderHandler] Используем точный баланс: {amount_to_sell:.8f} {base_asset}")
+                
+                elif available_base < expected_amount:
+                    amount_to_sell = available_base
+                    dust_lost = expected_amount - available_base
+                    logger.warning(
+                        f"[OrderHandler] Баланс ниже ожидаемого. "
+                        f"Продаем: {amount_to_sell:.8f}, Потеряно пыли: {dust_lost:.8f} {base_asset}"
+                    )
+                
+                else:
+                    amount_to_sell = expected_amount
+                    logger.warning(
+                        f"[OrderHandler] Баланс выше ожидаемого. "
+                        f"Используем ожидаемое количество для безопасности: {amount_to_sell:.8f} {base_asset}"
+                    )
+            else:
+                amount_to_sell = available_base
+                logger.warning(f"[OrderHandler] Нет ожидаемого количества в БД, используем доступный баланс")
             
             if amount_to_sell <= 0:
-                logger.warning(f"[OrderHandler] Недостаточно {base_asset} для создания TP-ордера. Доступно: {available_base}, требуется: {cycle.total_base_qty}")
+                logger.error(f"[OrderHandler] Финальное количество равно нулю или отрицательное: {amount_to_sell:.8f}")
                 return
             
-            safe_amount = await self.utils.round_amount(config.symbol, amount_to_sell)
             safe_price = await self.utils.round_price(config.symbol, float(tp_price))
             
-            if not await self.utils.check_min_notional(config.symbol, safe_amount, safe_price):
-                logger.warning(f"[OrderHandler] TP Order too small (amount={safe_amount}, price={safe_price}), waiting for more fills")
+            notional_value = amount_to_sell * safe_price
+            if not await self.utils.check_min_notional(config.symbol, amount_to_sell, safe_price):
+                logger.warning(
+                    f"[OrderHandler] TP ниже минимальной суммы. "
+                    f"Количество: {amount_to_sell:.8f}, Цена: {safe_price:.2f}, "
+                    f"Сумма: {notional_value:.2f} USDT"
+                )
                 return
+            
+            logger.info(
+                f"[OrderHandler] Создание TP-ордера: "
+                f"количество={amount_to_sell:.8f} {base_asset}, "
+                f"цена={safe_price:.2f} USDT, "
+                f"сумма={notional_value:.2f} USDT"
+            )
             
             tp_res = await self.exchange.create_order(
                 symbol=config.symbol,
                 type='limit',
                 side='sell',
-                amount=safe_amount,
+                amount=amount_to_sell,
                 price=safe_price
             )
+            
+            logger.info(
+                f"[OrderHandler] TP-ордер успешно создан: "
+                f"order_id={tp_res['id']}, "
+                f"количество={amount_to_sell:.8f} {base_asset}, "
+                f"цена={safe_price:.2f} USDT, "
+                f"использовано_баланса={available_base:.8f} {base_asset}"
+            )
+            
+        except ccxt.NetworkError as e:
+            logger.error(f"[OrderHandler] Ошибка сети при создании TP: {e}")
+            return
+            
         except ccxt.InsufficientFunds as e:
-            logger.error(f"[OrderHandler] InsufficientFunds при создании TP-ордера: {e}. Пробуем уменьшить amount на минимальный шаг.")
-            try:
-                market = await self.utils.get_market(config.symbol)
-                step_size = market.get('limits', {}).get('amount', {}).get('min', 0.0001)
-                
-                if amount_to_sell > step_size:
-                    safe_amount = await self.utils.round_amount(config.symbol, amount_to_sell - step_size)
-                    safe_price = await self.utils.round_price(config.symbol, float(tp_price))
-                    
-                    if await self.utils.check_min_notional(config.symbol, safe_amount, safe_price):
-                        tp_res = await self.exchange.create_order(
-                            symbol=config.symbol,
-                            type='limit',
-                            side='sell',
-                            amount=safe_amount,
-                            price=safe_price
-                        )
-                    else:
-                        logger.error(f"[OrderHandler] Не удалось создать TP-ордер даже после уменьшения amount. Пропускаем.")
-                        return
-                else:
-                    logger.error(f"[OrderHandler] Amount слишком мал для уменьшения. Пропускаем создание TP-ордера.")
-                    return
-            except Exception as retry_error:
-                logger.error(f"[OrderHandler] Ошибка при повторной попытке создания TP-ордера: {retry_error}")
-                return
+            logger.error(
+                f"[OrderHandler] Ошибка недостаточных средств: {e}. "
+                f"Этого не должно происходить при проверке баланса!"
+            )
+            return
+
+        except ccxt.InvalidOrder as e:
+            logger.error(f"[OrderHandler] Ошибка невалидного ордера: {e}")
+            return
+
         except Exception as e:
-            logger.error(f"[OrderHandler] Неожиданная ошибка при создании TP-ордера: {e}")
+            logger.error(f"[OrderHandler] Неожиданная ошибка при создании TP: {e}", exc_info=True)
             return
 
         tp_binance_id = str(tp_res['id'])
@@ -209,11 +278,11 @@ class OrderHandler:
             order_type="SELL_TP",
             order_index=-1,
             price=safe_price,
-            amount=safe_amount,
+            amount=amount_to_sell,
             status=OrderStatus.ACTIVE
         )
         self.session.add(new_tp_order)
-        logger.info(f"[OrderHandler] TP-ордер создан и сохранен в БД: binance_id={tp_binance_id}, price={tp_price:.2f}, amount={cycle.total_base_qty}")
+        logger.info(f"[OrderHandler] TP-ордер создан и сохранен в БД: binance_id={tp_binance_id}, price={tp_price:.2f}, amount={amount_to_sell}")
 
         next_index = db_order.order_index + 1
         stmt = (
@@ -234,7 +303,7 @@ class OrderHandler:
             next_safe_price = await self.utils.round_price(config.symbol, next_order.price)
             
             if not await self.utils.check_min_notional(config.symbol, next_safe_amount, next_safe_price):
-                logger.warning(f"[OrderHandler] Next order too small (amount={next_safe_amount}, price={next_safe_price}), skipping")
+                logger.warning(f"[OrderHandler] Следующий ордер слишком мал (количество={next_safe_amount}, цена={next_safe_price}), пропускаем")
             else:
                 next_binance_res = await self.exchange.create_order(
                     symbol=config.symbol,
@@ -267,16 +336,16 @@ class OrderHandler:
                 await self.exchange.cancel_order(order.binance_order_id, config.symbol)
                 order.status = OrderStatus.CANCELED
             except Exception as e:
-                logger.error(f"Failed to cancel order {order.binance_order_id}: {e}")
+                logger.error(f"Не удалось отменить ордер {order.binance_order_id}: {e}")
 
-        logger.info(f"TP Order details from exchange:")
+        logger.info(f"Детали TP-ордера с биржи:")
         logger.info(f"  id: {binance_order.get('id')}")
-        logger.info(f"  price: {binance_order.get('price')}")
-        logger.info(f"  amount: {binance_order.get('amount')}")
-        logger.info(f"  cost: {binance_order.get('cost')}")
-        logger.info(f"  fee: {binance_order.get('fee')}")
-        logger.info(f"  DB order price: {db_order.price}")
-        logger.info(f"  DB order amount: {db_order.amount}")
+        logger.info(f"  цена: {binance_order.get('price')}")
+        logger.info(f"  количество: {binance_order.get('amount')}")
+        logger.info(f"  стоимость: {binance_order.get('cost')}")
+        logger.info(f"  комиссия: {binance_order.get('fee')}")
+        logger.info(f"  цена ордера в БД: {db_order.price}")
+        logger.info(f"  количество ордера в БД: {db_order.amount}")
 
         base_cost = Decimal(str(binance_order.get('cost', 0)))
 
@@ -284,7 +353,7 @@ class OrderHandler:
             price = Decimal(str(binance_order.get('price', db_order.price)))
             amount = Decimal(str(binance_order.get('amount', db_order.amount)))
             base_cost = price * amount
-            logger.warning(f"Cost not provided by exchange, calculated: {base_cost}")
+            logger.warning(f"Стоимость не предоставлена биржей, рассчитано: {base_cost}")
 
         fee_info = binance_order.get('fee', {})
         fee_cost = Decimal("0")
@@ -294,13 +363,13 @@ class OrderHandler:
 
             if fee_currency == 'USDT' or fee_currency == 'USD':
                 fee_cost = Decimal(str(fee_info.get('cost', 0)))
-                logger.info(f"Sell fee from exchange: {fee_cost} USDT")
+                logger.info(f"Комиссия при продаже с биржи: {fee_cost} USDT")
             else:
-                logger.warning(f"Fee currency {fee_currency} not USDT, using 0.1%")
+                logger.warning(f"Валюта комиссии {fee_currency} не USDT, используем 0.1%")
                 fee_cost = base_cost * Decimal("0.001")
         else:
             fee_cost = base_cost * Decimal("0.001")
-            logger.warning(f"No fee info from exchange, calculated 0.1%: {fee_cost}")
+            logger.warning(f"Нет информации о комиссии с биржи, рассчитано 0.1%: {fee_cost}")
 
         total_received = base_cost - fee_cost
 
@@ -314,34 +383,34 @@ class OrderHandler:
 
         if actual_profit_pct < expected_min_profit_pct:
             logger.error(
-                f"⚠️ ANOMALY DETECTED! Cycle {cycle.id} closed with suspiciously low profit: "
-                f"profit={profit:.4f} USDT ({actual_profit_pct:.2f}%), "
-                f"expected at least {expected_min_profit_pct:.2f}%"
+                f"ОБНАРУЖЕНА АНОМАЛИЯ! Цикл {cycle.id} закрыт с подозрительно низкой прибылью: "
+                f"прибыль={profit:.4f} USDT ({actual_profit_pct:.2f}%), "
+                f"ожидалось минимум {expected_min_profit_pct:.2f}%"
             )
             logger.error(
-                f"Details: spent={float(total_spent):.4f}, "
-                f"received={float(total_received):.4f}, "
-                f"avg_price={cycle.avg_price:.2f}, "
-                f"tp_price={db_order.price:.2f}"
+                f"Детали: потрачено={float(total_spent):.4f}, "
+                f"получено={float(total_received):.4f}, "
+                f"средняя_цена={cycle.avg_price:.2f}, "
+                f"tp_цена={db_order.price:.2f}"
             )
 
         logger.info(
-            f"Cycle {cycle.id} closed: "
-            f"received={float(total_received):.2f} USDT "
-            f"(gross={float(base_cost):.2f}, fee={float(fee_cost):.4f}), "
-            f"spent={float(total_spent):.2f} USDT, "
-            f"profit={profit:.2f} USDT ({actual_profit_pct:.2f}%)"
+            f"Цикл {cycle.id} закрыт: "
+            f"получено={float(total_received):.2f} USDT "
+            f"(брутто={float(base_cost):.2f}, комиссия={float(fee_cost):.4f}), "
+            f"потрачено={float(total_spent):.2f} USDT, "
+            f"прибыль={profit:.2f} USDT ({actual_profit_pct:.2f}%)"
         )
 
         await self.session.commit()
         old_ws_manager = websocket_registry.get(config.id)
         if old_ws_manager:
-            logger.info(f"Stopping old WebSocket manager for config {config.id}")
+            logger.info(f"Остановка старого WebSocket менеджера для конфигурации {config.id}")
             await old_ws_manager.stop()
             await websocket_registry.remove(config.id)
             await asyncio.sleep(0.5)
-            logger.info(f"Old WebSocket manager stopped")
+            logger.info(f"Старый WebSocket менеджер остановлен")
 
         manager = BotManager(self.session)
         await manager.start_first_cycle(config)
-        logger.info(f"New cycle started for config {config.id}")
+        logger.info(f"Новый цикл запущен для конфигурации {config.id}")

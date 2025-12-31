@@ -23,7 +23,7 @@ class WebSocketRegistry:
                 asyncio.create_task(self._stop_manager_safely(old_manager, config_id))
 
             self.managers[config_id] = manager
-            logger.info(f"✅ WebSocket Manager добавлен для config_id: {config_id}")
+            logger.info(f"WebSocket Manager добавлен для config_id: {config_id}")
 
     async def _stop_manager_safely(self, manager, config_id):
         """Безопасно останавливает manager"""
