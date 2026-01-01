@@ -34,6 +34,7 @@ class DcaCycle(Base):
 
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     closed_at: Mapped[Optional[datetime]] = mapped_column(nullable=True)
+    accumulated_dust: Mapped[float] = mapped_column(default=0.0, nullable=False)
 
     config: Mapped["BotConfig"] = relationship(back_populates="cycles")
     orders: Mapped[List["Order"]] = relationship(back_populates="cycle")

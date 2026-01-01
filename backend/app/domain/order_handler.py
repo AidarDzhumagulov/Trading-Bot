@@ -1,4 +1,5 @@
 import asyncio
+import math
 from decimal import Decimal
 from datetime import datetime
 import ccxt
@@ -215,22 +216,92 @@ class OrderHandler:
             if amount_to_sell <= 0:
                 logger.error(f"[OrderHandler] Финальное количество равно нулю или отрицательное: {amount_to_sell:.8f}")
                 return
+
+            accumulated_dust = float(cycle.accumulated_dust or 0.0)
+            total_with_dust = amount_to_sell + accumulated_dust
+
+            logger.info(
+                f"[OrderHandler] 💎 Dust Accumulation: "
+                f"current={amount_to_sell:.8f}, "
+                f"accumulated={accumulated_dust:.8f}, "
+                f"total={total_with_dust:.8f} {base_asset}"
+            )
+
+            market = await self.utils.get_market(config.symbol)
+            amount_precision = market.get('precision', {}).get('amount', 8)
+
+            if isinstance(amount_precision, int):
+                factor = 10 ** amount_precision
+                final_amount = math.floor(total_with_dust * factor) / factor
+            else:
+                final_amount = float(self.exchange.amount_to_precision(config.symbol, total_with_dust))
+
+            new_dust = total_with_dust - final_amount
+            cycle.accumulated_dust = new_dust
+
+            logger.info(
+                f"[OrderHandler] После округления: "
+                f"sellable={final_amount:.8f}, "
+                f"new_dust={new_dust:.8f} {base_asset} "
+                f"(будет добавлено к следующему циклу)"
+            )
+
+            if final_amount <= 0:
+                logger.error(f"[OrderHandler] Финальное количество после округления равно нулю: {final_amount:.8f}")
+                return
+
+            step_size = 1.0 / factor if isinstance(amount_precision, int) else 0.0001
+            max_precision_loss_amount = step_size
+
+            current_price = float(avg_price)
+            safe_price_for_calc = await self.utils.round_price(config.symbol, current_price)
+
+            max_precision_loss_usd = max_precision_loss_amount * safe_price_for_calc
+
+            total_fees_usd = float(cycle.total_quote_spent) * 0.002
+
+            total_overhead_usd = max_precision_loss_usd + total_fees_usd
+
+            if float(cycle.total_quote_spent) > 0:
+                min_tp_pct = (total_overhead_usd / float(cycle.total_quote_spent)) * 100
+            else:
+                min_tp_pct = 0.5
+
+            safe_tp_pct = min_tp_pct * 1.5
+
+            effective_tp_pct = max(float(config.take_profit_pct), safe_tp_pct)
+
+            logger.info(
+                f"[OrderHandler] Adaptive TP Calculation: "
+                f"precision_loss={max_precision_loss_usd:.4f} USDT, "
+                f"fees={total_fees_usd:.4f} USDT, "
+                f"total_overhead={total_overhead_usd:.4f} USDT"
+            )
+
+            logger.info(
+                f"[OrderHandler] TP Levels: "
+                f"min_break_even={min_tp_pct:.2f}%, "
+                f"safe_tp={safe_tp_pct:.2f}%, "
+                f"user_tp={config.take_profit_pct:.2f}%, "
+                f"effective_tp={effective_tp_pct:.2f}%"
+            )
+
+            tp_price_adaptive = avg_price * (Decimal("1") + Decimal(str(effective_tp_pct)) / Decimal("100"))
+            safe_price = await self.utils.round_price(config.symbol, float(tp_price_adaptive))
             
-            safe_price = await self.utils.round_price(config.symbol, float(tp_price))
-            
-            notional_value = amount_to_sell * safe_price
-            if not await self.utils.check_min_notional(config.symbol, amount_to_sell, safe_price):
+            notional_value = final_amount * safe_price
+            if not await self.utils.check_min_notional(config.symbol, final_amount, safe_price):
                 logger.warning(
                     f"[OrderHandler] TP ниже минимальной суммы. "
-                    f"Количество: {amount_to_sell:.8f}, Цена: {safe_price:.2f}, "
+                    f"Количество: {final_amount:.8f}, Цена: {safe_price:.2f}, "
                     f"Сумма: {notional_value:.2f} USDT"
                 )
                 return
-            
+
             logger.info(
                 f"[OrderHandler] Создание TP-ордера: "
-                f"количество={amount_to_sell:.8f} {base_asset}, "
-                f"цена={safe_price:.2f} USDT, "
+                f"количество={final_amount:.8f} {base_asset}, "
+                f"цена={safe_price:.2f} USDT (TP: {effective_tp_pct:.2f}%), "
                 f"сумма={notional_value:.2f} USDT"
             )
             
@@ -238,16 +309,17 @@ class OrderHandler:
                 symbol=config.symbol,
                 type='limit',
                 side='sell',
-                amount=amount_to_sell,
+                amount=final_amount,
                 price=safe_price
             )
             
             logger.info(
                 f"[OrderHandler] TP-ордер успешно создан: "
                 f"order_id={tp_res['id']}, "
-                f"количество={amount_to_sell:.8f} {base_asset}, "
+                f"количество={final_amount:.8f} {base_asset}, "
                 f"цена={safe_price:.2f} USDT, "
-                f"использовано_баланса={available_base:.8f} {base_asset}"
+                f"effective_tp={effective_tp_pct:.2f}%, "
+                f"expected_profit={(notional_value - float(cycle.total_quote_spent)):.2f} USDT"
             )
             
         except ccxt.NetworkError as e:
@@ -278,11 +350,17 @@ class OrderHandler:
             order_type="SELL_TP",
             order_index=-1,
             price=safe_price,
-            amount=amount_to_sell,
+            amount=final_amount,
             status=OrderStatus.ACTIVE
         )
         self.session.add(new_tp_order)
-        logger.info(f"[OrderHandler] TP-ордер создан и сохранен в БД: binance_id={tp_binance_id}, price={tp_price:.2f}, amount={amount_to_sell}")
+        logger.info(
+            f"[OrderHandler] TP-ордер создан и сохранен в БД: "
+            f"binance_id={tp_binance_id}, "
+            f"price={safe_price:.2f}, "
+            f"amount={final_amount:.8f}, "
+            f"effective_tp={effective_tp_pct:.2f}%"
+        )
 
         next_index = db_order.order_index + 1
         stmt = (
@@ -324,7 +402,8 @@ class OrderHandler:
         db_order.status = OrderStatus.FILLED
         cycle.status = CycleStatus.CLOSED
         cycle.closed_at = datetime.utcnow()
-
+        cycle.accumulated_dust = 0.0
+        logger.info(f"[OrderHandler] Accumulated dust reset to 0 for next cycle")
         active_orders = await self.session.execute(
             select(Order).where(
                 Order.cycle_id == cycle.id,
