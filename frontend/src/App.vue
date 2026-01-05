@@ -277,6 +277,10 @@
               {{ formatCurrency(dashboard.totalProfit) }}
             </p>
             <p class="text-xs text-slate-500 mt-1">USDT</p>
+            <p v-if="dashboard.roiPct !== 0" class="text-xs mt-1"
+               :class="dashboard.roiPct >= 0 ? 'text-emerald-400' : 'text-red-400'">
+              ROI: {{ dashboard.roiPct >= 0 ? '+' : '' }}{{ dashboard.roiPct.toFixed(2) }}%
+            </p>
           </div>
 
           <div
@@ -288,7 +292,37 @@
             <p class="text-3xl font-bold text-blue-500">
               {{ dashboard.completedCycles }}
             </p>
-              <p class="text-xs text-slate-500 mt-1">Всего циклов</p>
+            <p class="text-xs text-slate-500 mt-1">Всего циклов</p>
+            <p v-if="dashboard.winRate > 0" class="text-xs mt-1 text-blue-400">
+              Win Rate: {{ dashboard.winRate.toFixed(1) }}%
+            </p>
+          </div>
+        </div>
+
+        <div v-if="dashboard.completedCycles > 0" class="grid grid-cols-4 gap-4">
+          <div class="bg-slate-800/50 rounded-lg p-4">
+            <p class="text-xs text-slate-500 mb-1">Средняя прибыль</p>
+            <p class="text-lg font-semibold text-slate-100">
+              ${{ formatNumber(dashboard.avgProfitPerCycle) }}
+            </p>
+          </div>
+          <div class="bg-slate-800/50 rounded-lg p-4">
+            <p class="text-xs text-slate-500 mb-1">Средняя длительность</p>
+            <p class="text-lg font-semibold text-slate-100">
+              {{ dashboard.avgCycleDurationHours.toFixed(1) }}ч
+            </p>
+          </div>
+          <div class="bg-slate-800/50 rounded-lg p-4">
+            <p class="text-xs text-slate-500 mb-1">Лучший цикл</p>
+            <p class="text-lg font-semibold text-emerald-500">
+              ${{ formatNumber(dashboard.bestCycleProfit) }}
+            </p>
+          </div>
+          <div class="bg-slate-800/50 rounded-lg p-4">
+            <p class="text-xs text-slate-500 mb-1">Худший цикл</p>
+            <p class="text-lg font-semibold text-red-500">
+              ${{ formatNumber(dashboard.worstCycleProfit) }}
+            </p>
           </div>
         </div>
 
@@ -333,6 +367,9 @@
               <p class="text-lg font-semibold text-emerald-500">
                 ${{ formatNumber(dashboard.currentCycle.takeProfitPrice) }}
               </p>
+              <p v-if="dashboard.currentCycle.effectiveTpPct > 0" class="text-xs text-emerald-400 mt-1">
+                Эффективный TP: {{ dashboard.currentCycle.effectiveTpPct.toFixed(2) }}%
+              </p>
             </div>
             <div class="bg-slate-800/50 rounded-lg p-4">
               <p class="text-xs text-slate-500 mb-1">Общий объем</p>
@@ -347,6 +384,28 @@
                 ${{ formatNumber(dashboard.currentCycle.investedCapital) }}
               </p>
             </div>
+          </div>
+
+          <div v-if="dashboard.currentCycle.unrealizedProfit !== 0 || dashboard.currentCycle.expectedProfit !== 0" class="grid grid-cols-2 gap-4 mt-4">
+            <div class="bg-slate-800/50 rounded-lg p-4">
+              <p class="text-xs text-slate-500 mb-1">Текущая прибыль</p>
+              <p class="text-lg font-semibold"
+                 :class="dashboard.currentCycle.unrealizedProfit >= 0 ? 'text-emerald-500' : 'text-red-500'">
+                {{ dashboard.currentCycle.unrealizedProfit >= 0 ? '+' : '' }}${{ formatNumber(dashboard.currentCycle.unrealizedProfit) }}
+              </p>
+            </div>
+            <div class="bg-slate-800/50 rounded-lg p-4">
+              <p class="text-xs text-slate-500 mb-1">Ожидаемая прибыль</p>
+              <p class="text-lg font-semibold text-emerald-500">
+                ${{ formatNumber(dashboard.currentCycle.expectedProfit) }}
+              </p>
+            </div>
+          </div>
+
+          <div v-if="dashboard.currentCycle.accumulatedDust > 0" class="mt-4 bg-slate-800/30 rounded-lg p-3">
+            <p class="text-xs text-slate-400">
+              Накопленная пыль: {{ dashboard.currentCycle.accumulatedDust.toFixed(8) }} {{ config.market.split('/')[0] }}
+            </p>
           </div>
         </div>
 
@@ -456,6 +515,15 @@ const dashboard = ref({
   livePrice: 0,
   priceChange24h: 0,
   currentMarketPrice: 0,
+  totalInvested: 0,
+  roiPct: 0,
+  winRate: 0,
+  avgProfitPerCycle: 0,
+  avgCycleDurationHours: 0,
+  bestCycleProfit: 0,
+  worstCycleProfit: 0,
+  currentUnrealizedProfit: 0,
+  currentExpectedProfit: 0,
   currentCycle: {
     averagePrice: 0,
     takeProfitPrice: 0,
@@ -466,6 +534,10 @@ const dashboard = ref({
     tpOrderPrice: 0,
     tpOrderVolume: 0,
     totalQuoteSpent: 0,
+    effectiveTpPct: 0,
+    expectedProfit: 0,
+    unrealizedProfit: 0,
+    accumulatedDust: 0,
   }
 })
 
@@ -584,6 +656,15 @@ const updateStats = async () => {
 
     dashboard.value.totalProfit = stats.totalProfitUsdt || 0
     dashboard.value.completedCycles = stats.completedCycles || 0
+    dashboard.value.totalInvested = stats.totalInvested || 0
+    dashboard.value.roiPct = stats.roiPct || 0
+    dashboard.value.winRate = stats.winRate || 0
+    dashboard.value.avgProfitPerCycle = stats.avgProfitPerCycle || 0
+    dashboard.value.avgCycleDurationHours = stats.avgCycleDurationHours || 0
+    dashboard.value.bestCycleProfit = stats.bestCycleProfit || 0
+    dashboard.value.worstCycleProfit = stats.worstCycleProfit || 0
+    dashboard.value.currentUnrealizedProfit = stats.currentUnrealizedProfit || 0
+    dashboard.value.currentExpectedProfit = stats.currentExpectedProfit || 0
 
     if (stats.currentCycle) {
       const cycle = stats.currentCycle
@@ -592,6 +673,10 @@ const updateStats = async () => {
       dashboard.value.currentCycle.takeProfitPrice = cycle.tpOrderPrice || 0
       dashboard.value.currentCycle.totalVolume = cycle.tpOrderVolume || 0
       dashboard.value.currentCycle.investedCapital = cycle.totalQuoteSpent || 0
+      dashboard.value.currentCycle.effectiveTpPct = cycle.effectiveTpPct || 0
+      dashboard.value.currentCycle.expectedProfit = cycle.expectedProfit || 0
+      dashboard.value.currentCycle.unrealizedProfit = cycle.unrealizedProfit || 0
+      dashboard.value.currentCycle.accumulatedDust = cycle.accumulatedDust || 0
 
       if (cycle.currentMarketPrice) {
         const oldPrice = dashboard.value.livePrice

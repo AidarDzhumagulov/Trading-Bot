@@ -51,7 +51,7 @@ async def stop_bot(config_id: UUID, session: AsyncSession = Depends(get_session)
 
     try:
         await ws_manager.stop()
-        websocket_registry.remove(config_id)
+        await websocket_registry.remove(config_id)
         
         config.is_active = False
         await session.commit()

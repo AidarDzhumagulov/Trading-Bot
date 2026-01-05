@@ -221,10 +221,10 @@ class OrderHandler:
             total_with_dust = amount_to_sell + accumulated_dust
 
             logger.info(
-                f"[OrderHandler] 💎 Dust Accumulation: "
-                f"current={amount_to_sell:.8f}, "
-                f"accumulated={accumulated_dust:.8f}, "
-                f"total={total_with_dust:.8f} {base_asset}"
+                f"[OrderHandler] Накопление пыли: "
+                f"текущее={amount_to_sell:.8f}, "
+                f"накоплено={accumulated_dust:.8f}, "
+                f"всего={total_with_dust:.8f} {base_asset}"
             )
 
             market = await self.utils.get_market(config.symbol)
@@ -272,18 +272,18 @@ class OrderHandler:
             effective_tp_pct = max(float(config.take_profit_pct), safe_tp_pct)
 
             logger.info(
-                f"[OrderHandler] Adaptive TP Calculation: "
-                f"precision_loss={max_precision_loss_usd:.4f} USDT, "
-                f"fees={total_fees_usd:.4f} USDT, "
-                f"total_overhead={total_overhead_usd:.4f} USDT"
+                f"[OrderHandler] Расчет адаптивного TP: "
+                f"потеря_точности={max_precision_loss_usd:.4f} USDT, "
+                f"комиссии={total_fees_usd:.4f} USDT, "
+                f"общие_накладные={total_overhead_usd:.4f} USDT"
             )
 
             logger.info(
-                f"[OrderHandler] TP Levels: "
-                f"min_break_even={min_tp_pct:.2f}%, "
-                f"safe_tp={safe_tp_pct:.2f}%, "
-                f"user_tp={config.take_profit_pct:.2f}%, "
-                f"effective_tp={effective_tp_pct:.2f}%"
+                f"[OrderHandler] Уровни TP: "
+                f"мин_безубыточность={min_tp_pct:.2f}%, "
+                f"безопасный_tp={safe_tp_pct:.2f}%, "
+                f"пользовательский_tp={config.take_profit_pct:.2f}%, "
+                f"эффективный_tp={effective_tp_pct:.2f}%"
             )
 
             tp_price_adaptive = avg_price * (Decimal("1") + Decimal(str(effective_tp_pct)) / Decimal("100"))
@@ -403,7 +403,7 @@ class OrderHandler:
         cycle.status = CycleStatus.CLOSED
         cycle.closed_at = datetime.utcnow()
         cycle.accumulated_dust = 0.0
-        logger.info(f"[OrderHandler] Accumulated dust reset to 0 for next cycle")
+        logger.info(f"[OrderHandler] Накопленная пыль сброшена до 0 для следующего цикла")
         active_orders = await self.session.execute(
             select(Order).where(
                 Order.cycle_id == cycle.id,
