@@ -10,22 +10,21 @@ class BotConfigCreate(BaseModel):
         ...,
         min_length=1,
         max_length=255,
-        examples=["mWIM2Oyuj26cFgRnZbEeL1ommLyWVZbEhAxGI3o4b2xnkHB901FpvgtHaXtkHO7a"]
+        examples=["mWIM2Oyuj26cFgRnZbEeL1ommLyWVZbEhAxGI3o4b2xnkHB901FpvgtHaXtkHO7a"],
     )
     binance_api_secret: str = Field(
         ...,
         min_length=1,
         max_length=100,
-        examples=["TIwEZbwUQRz4ywXuzxC9a83ZG4nEZxVqwqCL0nNJCteHfiuxlCiYMyPI1YDhWPQy"]
+        examples=["TIwEZbwUQRz4ywXuzxC9a83ZG4nEZxVqwqCL0nNJCteHfiuxlCiYMyPI1YDhWPQy"],
     )
     symbol: Literal["BTC/USDT", "ETH/USDT"] = Field(
-        ...,
-        description="Торговая пара. Разрешены только BTC/USDT или ETH/USDT"
+        ..., description="Торговая пара. Разрешены только BTC/USDT или ETH/USDT"
     )
     total_budget: float = Field(
-        ..., 
-        gt=10, 
-        description="Сумма USDT для торговли. Минимум 10 USDT. Не должна превышать доступный баланс на бирже."
+        ...,
+        gt=10,
+        description="Сумма USDT для торговли. Минимум 10 USDT. Не должна превышать доступный баланс на бирже.",
     )
 
     grid_length_pct: float = Field(..., gt=0, le=100)
@@ -38,7 +37,7 @@ class BotConfigCreate(BaseModel):
 
     trailing_enabled: bool = Field(
         default=False,
-        description="Включить Trailing Take Profit для максимизации прибыли"
+        description="Включить Trailing Take Profit для максимизации прибыли",
     )
     trailing_callback_pct: float = Field(
         default=0.8,
@@ -48,7 +47,7 @@ class BotConfigCreate(BaseModel):
             "Процент отката от максимума для продажи. "
             "Рекомендуется: 0.5-1.2%. "
             "Автоматически адаптируется к волатильности (ATR)."
-        )
+        ),
     )
     trailing_min_profit_pct: float = Field(
         default=1.0,
@@ -57,7 +56,7 @@ class BotConfigCreate(BaseModel):
         description=(
             "Минимальная гарантированная прибыль (защита от убытков). "
             "Если цена падает ниже этого уровня - emergency exit."
-        )
+        ),
     )
 
     class Config:
@@ -75,7 +74,7 @@ class BotConfigCreate(BaseModel):
                 "take_profit_pct": 1.2,
                 "trailing_enabled": True,
                 "trailing_callback_pct": 0.8,
-                "trailing_min_profit_pct": 1.0
+                "trailing_min_profit_pct": 1.0,
             }
         }
 
@@ -105,7 +104,7 @@ class BotConfigUpdate(BaseModel):
             "example": {
                 "trailing_enabled": True,
                 "trailing_callback_pct": 0.8,
-                "trailing_min_profit_pct": 1.0
+                "trailing_min_profit_pct": 1.0,
             }
         }
 
@@ -122,23 +121,20 @@ class TrailingStatsResponse(BaseModel):
         json_schema_extra = {
             "example": {
                 "trailing_enabled": True,
-                "config": {
-                    "callback_pct": 0.8,
-                    "min_profit_pct": 1.0
-                },
+                "config": {"callback_pct": 0.8, "min_profit_pct": 1.0},
                 "statistics": {
                     "total_cycles_with_trailing": 15,
                     "closed_cycles": 12,
                     "emergency_exits": 1,
                     "success_rate_pct": 91.67,
-                    "avg_improvement_pct": 0.75
+                    "avg_improvement_pct": 0.75,
                 },
                 "current_cycle": {
                     "cycle_id": "123e4567-e89b-12d3-a456-426614174000",
                     "activation_price": 3149.26,
                     "max_price_tracked": 3200.00,
                     "current_tp_price": 3174.40,
-                    "potential_profit_pct": 5.67
-                }
+                    "potential_profit_pct": 5.67,
+                },
             }
         }

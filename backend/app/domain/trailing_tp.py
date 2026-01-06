@@ -1,4 +1,3 @@
-
 import json
 import time
 from datetime import datetime
@@ -102,7 +101,9 @@ class TrailingTPManager:
         """Проверка включен ли trailing"""
         return bool(self.config.trailing_enabled)
 
-    async def should_activate(self, cycle, current_price: float) -> Tuple[bool, Optional[float]]:
+    async def should_activate(
+        self, cycle, current_price: float
+    ) -> Tuple[bool, Optional[float]]:
         """
         Проверяет нужно ли активировать trailing (С ПОДТВЕРЖДЕНИЕМ!)
 
@@ -169,7 +170,9 @@ class TrailingTPManager:
                 self._tp_touch_times.pop(cycle.id, None)
             return False, None
 
-    async def activate(self, cycle, current_price: float, starting_max_price: Optional[float] = None):
+    async def activate(
+        self, cycle, current_price: float, starting_max_price: Optional[float] = None
+    ):
         """
         Активирует trailing для цикла
 
@@ -211,9 +214,7 @@ class TrailingTPManager:
                 return self._cached_atr
 
             ohlcv = await self.exchange.fetch_ohlcv(
-                symbol,
-                timeframe='5m',
-                limit=period + 1
+                symbol, timeframe="5m", limit=period + 1
             )
 
             if len(ohlcv) < period + 1:
@@ -226,11 +227,7 @@ class TrailingTPManager:
                 low = ohlcv[i][3]
                 prev_close = ohlcv[i - 1][4]
 
-                tr = max(
-                    high - low,
-                    abs(high - prev_close),
-                    abs(low - prev_close)
-                )
+                tr = max(high - low, abs(high - prev_close), abs(low - prev_close))
                 true_ranges.append(tr)
 
             atr = sum(true_ranges) / len(true_ranges)
@@ -298,7 +295,9 @@ class TrailingTPManager:
             old_max = current_max
             cycle.max_price_tracked = current_price
 
-            improvement_pct = ((current_price - old_max) / old_max * 100) if old_max > 0 else 0
+            improvement_pct = (
+                ((current_price - old_max) / old_max * 100) if old_max > 0 else 0
+            )
 
             logger.info(
                 f"Новая максимальная цена для цикла {cycle.id}: "
@@ -310,7 +309,9 @@ class TrailingTPManager:
 
         return False
 
-    def calculate_callback_price(self, max_price: float, callback_pct: Optional[float] = None) -> float:
+    def calculate_callback_price(
+        self, max_price: float, callback_pct: Optional[float] = None
+    ) -> float:
         """
         Рассчитывает цену для продажи на основе callback
         """
@@ -331,7 +332,9 @@ class TrailingTPManager:
         if not cycle.avg_price or not cycle.current_tp_price:
             return 0
 
-        effective_tp_pct = ((float(cycle.current_tp_price) / float(cycle.avg_price)) - 1) * 100
+        effective_tp_pct = (
+            (float(cycle.current_tp_price) / float(cycle.avg_price)) - 1
+        ) * 100
 
         adaptive_min_profit_pct = effective_tp_pct * 0.66
 
@@ -339,7 +342,9 @@ class TrailingTPManager:
 
         return float(cycle.avg_price) * (1 + final_min_profit_pct / 100)
 
-    async def should_exit(self, cycle, current_price: float, symbol: str) -> Tuple[bool, float, str]:
+    async def should_exit(
+        self, cycle, current_price: float, symbol: str
+    ) -> Tuple[bool, float, str]:
         """
         Проверяет нужно ли продать
 
@@ -354,8 +359,7 @@ class TrailingTPManager:
         adaptive_callback = await self.get_adaptive_callback(symbol)
 
         callback_price = self.calculate_callback_price(
-            float(cycle.max_price_tracked),
-            adaptive_callback
+            float(cycle.max_price_tracked), adaptive_callback
         )
 
         min_profit_price = self.calculate_min_profit_price(cycle)
@@ -363,14 +367,19 @@ class TrailingTPManager:
         final_exit_price = max(callback_price, min_profit_price)
 
         if current_price <= final_exit_price:
-            if final_exit_price == min_profit_price and min_profit_price > callback_price:
+            if (
+                final_exit_price == min_profit_price
+                and min_profit_price > callback_price
+            ):
                 reason = f"Min profit protection ({self.min_profit_pct}%)"
             else:
                 reason = f"Callback triggered ({adaptive_callback:.2f}% from max)"
 
             max_tracked = float(cycle.max_price_tracked)
-            drawdown_from_max = ((max_tracked - current_price) / max_tracked * 100)
-            profit_from_entry = ((current_price / cycle.avg_price - 1) * 100) if cycle.avg_price else 0
+            drawdown_from_max = (max_tracked - current_price) / max_tracked * 100
+            profit_from_entry = (
+                ((current_price / cycle.avg_price - 1) * 100) if cycle.avg_price else 0
+            )
 
             logger.info(
                 f"Trailing EXIT triggered for cycle {cycle.id}:\n"
@@ -388,7 +397,9 @@ class TrailingTPManager:
 
         return False, 0, "Price above exit threshold"
 
-    async def monitor_emergency_exit(self, cycle, current_price: float, session) -> bool:
+    async def monitor_emergency_exit(
+        self, cycle, current_price: float, session
+    ) -> bool:
         """
         КРИТИЧНАЯ ФУНКЦИЯ: Мониторинг аварийного выхода
 
@@ -409,7 +420,9 @@ class TrailingTPManager:
         emergency_threshold = min_profit_price * 0.995
 
         if current_price < emergency_threshold:
-            loss_pct = ((current_price / cycle.avg_price - 1) * 100) if cycle.avg_price else 0
+            loss_pct = (
+                ((current_price / cycle.avg_price - 1) * 100) if cycle.avg_price else 0
+            )
 
             logger.error(
                 f"EMERGENCY EXIT TRIGGER #1: Price below min profit!\n"
@@ -419,7 +432,9 @@ class TrailingTPManager:
                 f"   Current loss: {loss_pct:.2f}%"
             )
 
-            success = await self.emergency_market_sell(cycle, session, "Below min_profit")
+            success = await self.emergency_market_sell(
+                cycle, session, "Below min_profit"
+            )
             return success
 
         if self.dump_detector.detect_rapid_drop(threshold_pct=2.0):
@@ -454,15 +469,16 @@ class TrailingTPManager:
             if cycle.current_tp_order_id:
                 try:
                     await self.exchange.cancel_order(
-                        cycle.current_tp_order_id,
-                        self.config.symbol
+                        cycle.current_tp_order_id, self.config.symbol
                     )
                     logger.info(f"Отменен TP-ордер: {cycle.current_tp_order_id}")
                 except Exception as e:
-                    logger.warning(f"Не удалось отменить TP (возможно уже исполнен): {e}")
+                    logger.warning(
+                        f"Не удалось отменить TP (возможно уже исполнен): {e}"
+                    )
 
             balance = await self.exchange.fetch_free_balance()
-            base_asset = self.config.symbol.split('/')[0]
+            base_asset = self.config.symbol.split("/")[0]
             available = balance.get(base_asset, 0)
 
             if available <= 0:
@@ -472,10 +488,7 @@ class TrailingTPManager:
             logger.info(f"Доступно для аварийной продажи: {available:.8f} {base_asset}")
 
             order = await self.exchange.create_order(
-                symbol=self.config.symbol,
-                type='market',
-                side='sell',
-                amount=available
+                symbol=self.config.symbol, type="market", side="sell", amount=available
             )
 
             logger.info(
@@ -489,7 +502,6 @@ class TrailingTPManager:
             cycle.emergency_exit = True
             cycle.emergency_exit_reason = reason
             cycle.emergency_exit_time = datetime.utcnow()
-
 
             return True
 
@@ -523,9 +535,9 @@ class TrailingTPManager:
         """
         try:
             order = await self.exchange.fetch_order(order_id, symbol)
-            status = order.get('status', '').lower()
+            status = order.get("status", "").lower()
 
-            if status in ['closed', 'filled', 'canceled']:
+            if status in ["closed", "filled", "canceled"]:
                 logger.info(
                     f"Ордер {order_id} имеет статус {status}, пропускаем обновление"
                 )
@@ -538,12 +550,7 @@ class TrailingTPManager:
             return False
 
     async def create_or_update_tp_order(
-            self,
-            cycle,
-            new_tp_price: float,
-            amount: float,
-            symbol: str,
-            session
+        self, cycle, new_tp_price: float, amount: float, symbol: str, session
     ) -> bool:
         """
         Создает или обновляет TP ордер с защитой от race conditions
@@ -555,36 +562,36 @@ class TrailingTPManager:
                 return False
 
             if cycle.current_tp_order_id:
-                if not await self.is_order_still_open(cycle.current_tp_order_id, symbol):
+                if not await self.is_order_still_open(
+                    cycle.current_tp_order_id, symbol
+                ):
                     logger.info("Old TP order already processed, skipping update")
                     return False
 
             if cycle.current_tp_order_id:
                 try:
-                    await self.exchange.cancel_order(
-                        cycle.current_tp_order_id,
-                        symbol
-                    )
+                    await self.exchange.cancel_order(cycle.current_tp_order_id, symbol)
                     logger.info(f"Отменен старый TP: {cycle.current_tp_order_id}")
                 except Exception as e:
                     logger.warning(f"Не удалось отменить старый TP: {e}")
 
             new_tp_order = await self.exchange.create_order(
                 symbol=symbol,
-                type='limit',
-                side='sell',
+                type="limit",
+                side="sell",
                 amount=amount,
-                price=new_tp_price
+                price=new_tp_price,
             )
 
-            cycle.current_tp_order_id = str(new_tp_order['id'])
+            cycle.current_tp_order_id = str(new_tp_order["id"])
             cycle.current_tp_price = new_tp_price
 
             expected_revenue = amount * new_tp_price
             expected_profit = expected_revenue - float(cycle.total_quote_spent)
             expected_profit_pct = (
                 (expected_profit / float(cycle.total_quote_spent) * 100)
-                if cycle.total_quote_spent else 0
+                if cycle.total_quote_spent
+                else 0
             )
 
             logger.info(
@@ -613,21 +620,22 @@ class TrailingTPManager:
             return None
 
         stats = {
-            'active': True,
-            'activation_price': float(cycle.trailing_activation_price or 0),
-            'activation_time': (
+            "active": True,
+            "activation_price": float(cycle.trailing_activation_price or 0),
+            "activation_time": (
                 cycle.trailing_activation_time.isoformat()
-                if cycle.trailing_activation_time else None
+                if cycle.trailing_activation_time
+                else None
             ),
-            'max_price_tracked': float(cycle.max_price_tracked or 0),
-            'callback_pct': self.callback_pct,
-            'min_profit_pct': self.min_profit_pct,
+            "max_price_tracked": float(cycle.max_price_tracked or 0),
+            "callback_pct": self.callback_pct,
+            "min_profit_pct": self.min_profit_pct,
         }
 
         if cycle.max_price_tracked and cycle.trailing_activation_price:
             max_growth = (
-                    (cycle.max_price_tracked / cycle.trailing_activation_price - 1) * 100
-            )
-            stats['max_growth_from_activation'] = max_growth
+                cycle.max_price_tracked / cycle.trailing_activation_price - 1
+            ) * 100
+            stats["max_growth_from_activation"] = max_growth
 
         return stats

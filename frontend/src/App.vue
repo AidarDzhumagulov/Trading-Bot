@@ -979,15 +979,15 @@ const resetCycle = () => {
 onMounted(async () => {
   const savedConfigId = loadConfigId()
   const savedConfig = loadConfig()
-  
+
   if (savedConfigId) {
     try {
       configId.value = savedConfigId
-      
+
       if (savedConfig) {
         config.value = savedConfig
       }
-      
+
       const stats = await getStats(savedConfigId)
       if (stats.currentCycle) {
         botStatus.value = 'active'

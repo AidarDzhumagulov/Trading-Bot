@@ -23,10 +23,10 @@ class TradingUtils:
         """Нормальное математическое округление (banker's rounding)"""
         await self.ensure_markets_loaded()
         market = await self.get_market(symbol)
-        precision = market.get('precision', {}).get('amount', 8)
+        precision = market.get("precision", {}).get("amount", 8)
 
         if isinstance(precision, int):
-            factor = 10 ** precision
+            factor = 10**precision
             rounded = round(amount * factor) / factor
             return float(rounded)
 
@@ -36,10 +36,10 @@ class TradingUtils:
         """Округление вниз (для BUY ордеров)"""
         await self.ensure_markets_loaded()
         market = await self.get_market(symbol)
-        precision = market.get('precision', {}).get('amount', 8)
+        precision = market.get("precision", {}).get("amount", 8)
 
         if isinstance(precision, int):
-            factor = 10 ** precision
+            factor = 10**precision
             truncated = math.floor(amount * factor) / factor
             return float(truncated)
 
@@ -51,7 +51,7 @@ class TradingUtils:
 
     async def check_min_notional(self, symbol, amount, price):
         market = await self.get_market(symbol)
-        min_cost = market.get('limits', {}).get('cost', {}).get('min', 0)
+        min_cost = market.get("limits", {}).get("cost", {}).get("min", 0)
         if min_cost > 0:
             cost = float(amount) * float(price)
             return cost >= min_cost
@@ -59,14 +59,14 @@ class TradingUtils:
 
     async def get_amount_precision(self, symbol):
         market = await self.get_market(symbol)
-        precision = market.get('precision', {}).get('amount', 8)
+        precision = market.get("precision", {}).get("amount", 8)
         if isinstance(precision, int):
             return precision
         return 8
 
     async def get_price_precision(self, symbol):
         market = await self.get_market(symbol)
-        precision = market.get('precision', {}).get('price', 2)
+        precision = market.get("precision", {}).get("price", 2)
         if isinstance(precision, int):
             return precision
         return 2

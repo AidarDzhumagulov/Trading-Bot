@@ -21,7 +21,7 @@ const convertKeysToSnakeCase = (obj) => {
   if (Array.isArray(obj)) {
     return obj.map(item => convertKeysToSnakeCase(item))
   }
-  
+
   if (obj !== null && typeof obj === 'object') {
     return Object.keys(obj).reduce((acc, key) => {
       const snakeKey = toSnakeCase(key)
@@ -29,7 +29,7 @@ const convertKeysToSnakeCase = (obj) => {
       return acc
     }, {})
   }
-  
+
   return obj
 }
 
@@ -37,7 +37,7 @@ const convertKeysToCamelCase = (obj) => {
   if (Array.isArray(obj)) {
     return obj.map(item => convertKeysToCamelCase(item))
   }
-  
+
   if (obj !== null && typeof obj === 'object') {
     return Object.keys(obj).reduce((acc, key) => {
       const camelKey = toCamelCase(key)
@@ -45,7 +45,7 @@ const convertKeysToCamelCase = (obj) => {
       return acc
     }, {})
   }
-  
+
   return obj
 }
 

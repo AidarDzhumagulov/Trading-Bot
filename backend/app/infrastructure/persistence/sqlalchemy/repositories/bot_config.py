@@ -68,22 +68,18 @@ class SqlAlchemyBotConfigRepository(BotConfigRepository):
         if not config.trailing_enabled:
             return {
                 "trailing_enabled": False,
-                "message": "Trailing TP отключен для этой конфигурации"
+                "message": "Trailing TP отключен для этой конфигурации",
             }
 
         stmt = select(DcaCycle).where(
-            DcaCycle.config_id == config_id,
-            DcaCycle.trailing_active.is_(True)
+            DcaCycle.config_id == config_id, DcaCycle.trailing_active.is_(True)
         )
         result = await self.session.execute(stmt)
         trailing_cycles = result.scalars().all()
 
         total_with_trailing = len(trailing_cycles)
         emergency_exits = [c for c in trailing_cycles if c.emergency_exit]
-        closed_trailing = [
-            c for c in trailing_cycles
-            if c.status == CycleStatus.CLOSED
-        ]
+        closed_trailing = [c for c in trailing_cycles if c.status == CycleStatus.CLOSED]
 
         improvements: list[float] = []
         for cycle in closed_trailing:
@@ -93,14 +89,10 @@ class SqlAlchemyBotConfigRepository(BotConfigRepository):
                 improvement = actual_profit_pct - expected_profit_pct
                 improvements.append(improvement)
 
-        avg_improvement = (
-            sum(improvements) / len(improvements)
-            if improvements else 0
-        )
+        avg_improvement = sum(improvements) / len(improvements) if improvements else 0
 
         stmt_active = select(DcaCycle).where(
-            DcaCycle.config_id == config_id,
-            DcaCycle.status == CycleStatus.OPEN
+            DcaCycle.config_id == config_id, DcaCycle.status == CycleStatus.OPEN
         )
         result = await self.session.execute(stmt_active)
         current_cycle = result.scalar_one_or_none()
@@ -142,4 +134,3 @@ class SqlAlchemyBotConfigRepository(BotConfigRepository):
             },
             "current_cycle": current_trailing_status,
         }
-

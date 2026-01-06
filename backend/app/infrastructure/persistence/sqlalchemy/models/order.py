@@ -11,12 +11,14 @@ from app.core.database import Base
 if TYPE_CHECKING:
     from app.infrastructure.persistence.sqlalchemy.models.dca_cycle import DcaCycle
 
+
 class OrderStatus(Enum):
     PENDING = "pending"
     ACTIVE = "active"
     FILLED = "filled"
     CANCELED = "canceled"
     PARTIAL = "partial"
+
 
 class Order(Base):
     __tablename__ = "orders"
@@ -34,4 +36,3 @@ class Order(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     cycle: Mapped["DcaCycle"] = relationship(back_populates="orders")
-
