@@ -27,7 +27,7 @@ async def get_cycle(cycle_id: UUID, session: AsyncSession = Depends(get_session)
     stmt = select(func.count(Order.id)).where(
         Order.cycle_id == cycle.id,
         Order.order_type == "BUY_SAFETY",
-        Order.status == OrderStatus.FILLED
+        Order.status == OrderStatus.FILLED,
     )
     result = await session.execute(stmt)
     filled_orders_count = result.scalar() or 0
@@ -39,9 +39,7 @@ async def get_cycle(cycle_id: UUID, session: AsyncSession = Depends(get_session)
     expected_profit = None
 
     if cycle.current_tp_order_id:
-        stmt = select(Order).where(
-            Order.binance_order_id == cycle.current_tp_order_id
-        )
+        stmt = select(Order).where(Order.binance_order_id == cycle.current_tp_order_id)
         result = await session.execute(stmt)
         tp_order = result.scalar_one_or_none()
 
@@ -56,7 +54,11 @@ async def get_cycle(cycle_id: UUID, session: AsyncSession = Depends(get_session)
                     expected_profit = expected_revenue - float(cycle.total_quote_spent)
 
     unrealized_profit = None
-    if cycle.status == CycleStatus.OPEN and current_market_price and cycle.total_base_qty:
+    if (
+        cycle.status == CycleStatus.OPEN
+        and current_market_price
+        and cycle.total_base_qty
+    ):
         current_value = float(cycle.total_base_qty) * current_market_price
         unrealized_profit = current_value - float(cycle.total_quote_spent or 0)
 
@@ -72,22 +74,21 @@ async def get_cycle(cycle_id: UUID, session: AsyncSession = Depends(get_session)
         total_quote_spent=cycle.total_quote_spent or 0.0,
         current_market_price=current_market_price,
         unrealized_profit=unrealized_profit,
-        accumulated_dust=cycle.accumulated_dust or 0.0
+        accumulated_dust=cycle.accumulated_dust or 0.0,
     )
 
 
 @router.get("/stats/", response_model=EnhancedStatsResponse)
 async def get_stats(
     config_id: UUID = Query(..., description="ID конфигурации бота"),
-    session: AsyncSession = Depends(get_session)
+    session: AsyncSession = Depends(get_session),
 ):
     config = await session.get(BotConfig, config_id)
     if not config:
         raise HTTPException(status_code=404, detail="Config not found")
 
     stmt = select(DcaCycle).where(
-        DcaCycle.config_id == config_id,
-        DcaCycle.status == CycleStatus.CLOSED
+        DcaCycle.config_id == config_id, DcaCycle.status == CycleStatus.CLOSED
     )
     result = await session.execute(stmt)
     closed_cycles = result.scalars().all()
@@ -126,10 +127,11 @@ async def get_stats(
             best_cycle_profit = max(profits)
             worst_cycle_profit = min(profits)
 
-    stmt = select(DcaCycle).where(
-        DcaCycle.config_id == config_id,
-        DcaCycle.status == CycleStatus.OPEN
-    ).order_by(DcaCycle.created_at.desc())
+    stmt = (
+        select(DcaCycle)
+        .where(DcaCycle.config_id == config_id, DcaCycle.status == CycleStatus.OPEN)
+        .order_by(DcaCycle.created_at.desc())
+    )
     result = await session.execute(stmt)
     current_cycle = result.scalar_one_or_none()
 
@@ -148,6 +150,10 @@ async def get_stats(
         avg_cycle_duration_hours=avg_cycle_duration,
         best_cycle_profit=best_cycle_profit,
         worst_cycle_profit=worst_cycle_profit,
-        current_unrealized_profit=current_cycle_response.unrealized_profit if current_cycle_response else None,
-        current_expected_profit=current_cycle_response.expected_profit if current_cycle_response else None
+        current_unrealized_profit=current_cycle_response.unrealized_profit
+        if current_cycle_response
+        else None,
+        current_expected_profit=current_cycle_response.expected_profit
+        if current_cycle_response
+        else None,
     )

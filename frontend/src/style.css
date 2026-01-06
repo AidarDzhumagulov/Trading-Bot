@@ -6,7 +6,7 @@
   * {
     @apply border-slate-700;
   }
-  
+
   body {
     @apply text-slate-100;
   }

@@ -6,22 +6,24 @@ from app.core.config import settings
 
 router = APIRouter(prefix="/user", tags=["user"])
 
+
 @router.post("/balance/", response_model=BalanceResponse)
 async def get_binance_balance(data: BalanceCheckRequest):
-    exchange = async_support.binance({
-        'apiKey': data.api_key,
-        'secret': data.api_secret,
-    })
+    exchange = async_support.binance(
+        {
+            "apiKey": data.api_key,
+            "secret": data.api_secret,
+        }
+    )
 
     try:
         if settings.ENVIRONMENT == "DEV":
             exchange.set_sandbox_mode(True)
         balance = await exchange.fetch_balance()
-        usdt_info = balance.get('USDT', {})
+        usdt_info = balance.get("USDT", {})
 
         return BalanceResponse(
-            free_usdt=usdt_info.get('free', 0.0),
-            total_usdt=usdt_info.get('total', 0.0)
+            free_usdt=usdt_info.get("free", 0.0), total_usdt=usdt_info.get("total", 0.0)
         )
     except Exception as e:
         raise HTTPException(status_code=401, detail=f"Binance API Error: {str(e)}")

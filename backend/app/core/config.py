@@ -8,9 +8,7 @@ ENV_FILE = BASE_DIR / ".env"
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=str(ENV_FILE),
-        env_file_encoding="utf-8",
-        case_sensitive=True
+        env_file=str(ENV_FILE), env_file_encoding="utf-8", case_sensitive=True
     )
 
     ENVIRONMENT: str = "DEV"
@@ -20,8 +18,10 @@ class Settings(BaseSettings):
     DB_NAME: str
     DB_USER: str
     DB_PASSWORD: str
-    
-    CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173"
+
+    CORS_ORIGINS: str = (
+        "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173"
+    )
 
     @property
     def conn_str_async(self):

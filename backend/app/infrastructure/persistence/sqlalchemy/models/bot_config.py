@@ -8,7 +8,6 @@ from app.core.database import Base
 
 if TYPE_CHECKING:
     from app.infrastructure.persistence.sqlalchemy.models.dca_cycle import DcaCycle
-    from app.infrastructure.persistence.sqlalchemy.models.user import User
 
 
 class BotConfig(Base):
@@ -28,5 +27,9 @@ class BotConfig(Base):
     volume_scale_pct: Mapped[float] = mapped_column(nullable=False)
     grid_shift_threshold_pct: Mapped[float] = mapped_column(nullable=False)
     take_profit_pct: Mapped[float] = mapped_column(nullable=False)
+
+    trailing_enabled: Mapped[bool] = mapped_column(default=False, nullable=False)
+    trailing_callback_pct: Mapped[float] = mapped_column(default=0.8, nullable=False)
+    trailing_min_profit_pct: Mapped[float] = mapped_column(default=1.0, nullable=False)
 
     cycles: Mapped[List["DcaCycle"]] = relationship(back_populates="config")
