@@ -36,5 +36,14 @@ class DcaCycle(Base):
     closed_at: Mapped[Optional[datetime]] = mapped_column(nullable=True)
     accumulated_dust: Mapped[float] = mapped_column(default=0.0, nullable=False)
 
+    trailing_active: Mapped[bool] = mapped_column(default=False, nullable=False)
+    max_price_tracked: Mapped[Optional[float]] = mapped_column(nullable=True)
+    trailing_activation_price: Mapped[Optional[float]] = mapped_column(nullable=True)
+    trailing_activation_time: Mapped[Optional[datetime]] = mapped_column(nullable=True)
+
+    emergency_exit: Mapped[bool] = mapped_column(default=False, nullable=False)
+    emergency_exit_reason: Mapped[Optional[str]] = mapped_column(nullable=True)
+    emergency_exit_time: Mapped[Optional[datetime]] = mapped_column(nullable=True)
+
     config: Mapped["BotConfig"] = relationship(back_populates="cycles")
     orders: Mapped[List["Order"]] = relationship(back_populates="cycle")

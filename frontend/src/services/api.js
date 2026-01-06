@@ -61,6 +61,9 @@ const transformConfigForBackend = (config) => {
     volume_scale_pct: config.scaleStepVolume,
     grid_shift_threshold_pct: config.priceStep,
     take_profit_pct: config.takeProfit,
+    trailing_enabled: config.trailingEnabled || false,
+    trailing_callback_pct: config.trailingCallbackPct || 0.8,
+    trailing_min_profit_pct: config.trailingMinProfitPct || 1.0,
   }
 }
 
@@ -133,6 +136,15 @@ export const checkBalance = async (apiKey, apiSecret) => {
   }
 }
 
+export const getTrailingStats = async (configId) => {
+  try {
+    const response = await apiClient.get(`/api/v1/bot_config/${configId}/trailing-stats/`)
+    return convertKeysToCamelCase(response.data)
+  } catch (error) {
+    handleApiError(error)
+  }
+}
+
 const handleApiError = (error) => {
   if (error.response) {
     const errorMessage = error.response.data?.detail || error.response.statusText
@@ -152,4 +164,5 @@ export default {
   stopBot,
   checkBalance,
   getStats,
+  getTrailingStats,
 }

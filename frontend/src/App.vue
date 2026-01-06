@@ -217,6 +217,69 @@
           </div>
         </div>
 
+        <div class="bg-slate-900 border border-slate-800 rounded-lg p-6 shadow-xl">
+          <div class="flex items-center gap-2 mb-4">
+            <TrendingUpIcon class="w-5 h-5 text-slate-400"/>
+            <h2 class="text-xl font-semibold text-slate-100">Trailing Take Profit</h2>
+          </div>
+          <div class="space-y-4">
+            <div class="flex items-center gap-3">
+              <input
+                  v-model="config.trailingEnabled"
+                  type="checkbox"
+                  id="trailingEnabled"
+                  class="w-5 h-5 rounded bg-slate-800 border-slate-700 text-emerald-600 focus:ring-emerald-500 focus:ring-2"
+              />
+              <label for="trailingEnabled" class="text-sm font-medium text-slate-300 cursor-pointer">
+                Включить Trailing Take Profit
+              </label>
+            </div>
+            <p class="text-xs text-slate-500">
+              Автоматически отслеживает максимальную цену и продает при откате, максимизируя прибыль
+            </p>
+
+            <div v-if="config.trailingEnabled" class="space-y-4 pt-2 border-t border-slate-700">
+              <div>
+                <label class="block text-sm font-medium text-slate-300 mb-2">
+                  Процент отката от максимума (%)
+                  <span class="text-slate-500 text-xs ml-1">(Callback для продажи)</span>
+                </label>
+                <input
+                    v-model.number="config.trailingCallbackPct"
+                    type="number"
+                    min="0"
+                    max="5"
+                    step="0.1"
+                    placeholder="например, 0.8"
+                    class="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition"
+                />
+                <p class="text-slate-500 text-xs mt-1">
+                  Рекомендуется: 0.5-1.2%. Автоматически адаптируется к волатильности
+                </p>
+              </div>
+
+              <div>
+                <label class="block text-sm font-medium text-slate-300 mb-2">
+                  Минимальная гарантированная прибыль (%)
+                  <span class="text-slate-500 text-xs ml-1">(Защита от убытков)</span>
+                </label>
+                <input
+                    v-model.number="config.trailingMinProfitPct"
+                    type="number"
+                    min="0"
+                    max="10"
+                    step="0.1"
+                    placeholder="например, 1.0"
+                    class="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition"
+                />
+                <p class="text-slate-500 text-xs mt-1">
+                  Если цена падает ниже этого уровня - аварийная продажа по рынку
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="flex gap-4">
           <button
               @click="startBot"
@@ -409,6 +472,96 @@
           </div>
         </div>
 
+        <div v-if="dashboard.trailingStats.trailingEnabled" class="bg-slate-900 border border-slate-800 rounded-lg p-6 shadow-xl">
+          <div class="flex items-center gap-2 mb-4">
+            <TrendingUpIcon class="w-5 h-5 text-slate-400"/>
+            <h2 class="text-xl font-semibold text-slate-100">Trailing Take Profit</h2>
+          </div>
+
+          <div v-if="dashboard.trailingStats.config" class="mb-6">
+            <div class="grid grid-cols-2 gap-4">
+              <div class="bg-slate-800/50 rounded-lg p-4">
+                <p class="text-xs text-slate-500 mb-1">Callback %</p>
+                <p class="text-lg font-semibold text-slate-100">
+                  {{ dashboard.trailingStats.config.callbackPct }}%
+                </p>
+              </div>
+              <div class="bg-slate-800/50 rounded-lg p-4">
+                <p class="text-xs text-slate-500 mb-1">Min Profit %</p>
+                <p class="text-lg font-semibold text-slate-100">
+                  {{ dashboard.trailingStats.config.minProfitPct }}%
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div v-if="dashboard.trailingStats.statistics" class="mb-6">
+            <h3 class="text-sm font-semibold text-slate-300 mb-3">Статистика</h3>
+            <div class="grid grid-cols-2 gap-4">
+              <div class="bg-slate-800/50 rounded-lg p-4">
+                <p class="text-xs text-slate-500 mb-1">Всего циклов с trailing</p>
+                <p class="text-lg font-semibold text-slate-100">
+                  {{ dashboard.trailingStats.statistics.totalCyclesWithTrailing }}
+                </p>
+              </div>
+              <div class="bg-slate-800/50 rounded-lg p-4">
+                <p class="text-xs text-slate-500 mb-1">Закрытых циклов</p>
+                <p class="text-lg font-semibold text-slate-100">
+                  {{ dashboard.trailingStats.statistics.closedCycles }}
+                </p>
+              </div>
+              <div class="bg-slate-800/50 rounded-lg p-4">
+                <p class="text-xs text-slate-500 mb-1">Аварийных выходов</p>
+                <p class="text-lg font-semibold text-red-500">
+                  {{ dashboard.trailingStats.statistics.emergencyExits }}
+                </p>
+              </div>
+              <div class="bg-slate-800/50 rounded-lg p-4">
+                <p class="text-xs text-slate-500 mb-1">Success Rate</p>
+                <p class="text-lg font-semibold text-emerald-500">
+                  {{ (dashboard.trailingStats.statistics.successRatePct || 0).toFixed(1) }}%
+                </p>
+              </div>
+              <div class="bg-slate-800/50 rounded-lg p-4 col-span-2">
+                <p class="text-xs text-slate-500 mb-1">Среднее улучшение прибыли</p>
+                <p class="text-lg font-semibold text-emerald-500">
+                  +{{ dashboard.trailingStats.statistics.avgImprovementPct || 0 }}%
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div v-if="dashboard.trailingStats.currentCycle" class="border-t border-slate-700 pt-4">
+            <h3 class="text-sm font-semibold text-slate-300 mb-3">Текущий цикл</h3>
+            <div class="grid grid-cols-2 gap-4">
+              <div class="bg-slate-800/50 rounded-lg p-4">
+                <p class="text-xs text-slate-500 mb-1">Цена активации</p>
+                <p class="text-lg font-semibold text-slate-100">
+                  ${{ formatNumber(dashboard.trailingStats.currentCycle.activationPrice || 0) }}
+                </p>
+              </div>
+              <div class="bg-slate-800/50 rounded-lg p-4">
+                <p class="text-xs text-slate-500 mb-1">Максимальная цена</p>
+                <p class="text-lg font-semibold text-emerald-500">
+                  ${{ formatNumber(dashboard.trailingStats.currentCycle.maxPriceTracked || 0) }}
+                </p>
+              </div>
+              <div class="bg-slate-800/50 rounded-lg p-4">
+                <p class="text-xs text-slate-500 mb-1">Текущий TP</p>
+                <p class="text-lg font-semibold text-slate-100">
+                  ${{ formatNumber(dashboard.trailingStats.currentCycle.currentTpPrice || 0) }}
+                </p>
+              </div>
+              <div class="bg-slate-800/50 rounded-lg p-4">
+                <p class="text-xs text-slate-500 mb-1">Потенциальная прибыль</p>
+                <p class="text-lg font-semibold text-emerald-500">
+                  {{ dashboard.trailingStats.currentCycle.potentialProfitPct ? dashboard.trailingStats.currentCycle.potentialProfitPct.toFixed(2) : '0.00' }}%
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="bg-slate-900 border border-slate-800 rounded-lg p-6 shadow-xl">
           <div class="flex items-center gap-2 mb-4">
             <TrendingUpIcon class="w-5 h-5 text-slate-400"/>
@@ -486,7 +639,7 @@ import {
   SettingsIcon,
   TrendingUpIcon
 } from 'lucide-vue-next'
-import {checkBalance, getStats, setupBotConfig, startBot as apiStartBot, stopBot as apiStopBot} from './services/api.js'
+import {checkBalance, getStats, getTrailingStats, setupBotConfig, startBot as apiStartBot, stopBot as apiStopBot} from './services/api.js'
 
 const config = ref({
   apiKey: '',
@@ -498,7 +651,10 @@ const config = ref({
   safetyOrdersCount: 5,
   scaleStepVolume: 0,
   priceStep: 2.0,
-  takeProfit: 2.0
+  takeProfit: 2.0,
+  trailingEnabled: false,
+  trailingCallbackPct: 0.8,
+  trailingMinProfitPct: 1.0
 })
 
 const balance = ref({
@@ -524,6 +680,13 @@ const dashboard = ref({
   worstCycleProfit: 0,
   currentUnrealizedProfit: 0,
   currentExpectedProfit: 0,
+  trailingStats: {
+    trailingEnabled: false,
+    config: null,
+    statistics: null,
+    currentCycle: null,
+    message: null
+  },
   currentCycle: {
     averagePrice: 0,
     takeProfitPrice: 0,
@@ -647,6 +810,30 @@ const validateBalance = async () => {
   }
 }
 
+const updateTrailingStats = async () => {
+  if (!configId.value) return
+
+  try {
+    const trailing = await getTrailingStats(configId.value)
+    dashboard.value.trailingStats = trailing || {
+      trailingEnabled: false,
+      config: null,
+      statistics: null,
+      currentCycle: null,
+      message: null
+    }
+  } catch (error) {
+    console.error('Failed to update trailing stats:', error)
+    dashboard.value.trailingStats = {
+      trailingEnabled: false,
+      config: null,
+      statistics: null,
+      currentCycle: null,
+      message: null
+    }
+  }
+}
+
 const updateStats = async () => {
   if (!configId.value) return
 
@@ -693,6 +880,8 @@ const updateStats = async () => {
         lastUpdateTime.value = new Date().toLocaleTimeString()
       }
     }
+
+    await updateTrailingStats()
   } catch (error) {
     console.error('Failed to update stats:', error)
   }
@@ -806,6 +995,7 @@ onMounted(async () => {
       } else {
         botStatus.value = 'waiting'
         await updateStats()
+        await updateTrailingStats()
       }
     } catch (error) {
       console.warn('Failed to load saved config:', error)

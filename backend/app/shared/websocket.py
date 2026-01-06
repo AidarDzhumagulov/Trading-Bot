@@ -12,6 +12,8 @@ from app.infrastructure.persistence.sqlalchemy.models.dca_cycle import CycleStat
 from app.infrastructure.persistence.sqlalchemy.models.order import OrderStatus
 from app.core.logging import logger
 from app.core.config import settings
+from app.domain.trailing_tp import TrailingTPManager
+from app.shared.exchange_helper import TradingUtils
 
 if TYPE_CHECKING:
     from app.domain.order_handler import OrderHandler
@@ -37,6 +39,8 @@ class BinanceWebsocketManager:
         self._is_running = False
         self._last_shift_time = None
         self._shift_lock = asyncio.Lock()
+
+        self._trailing_managers = {}
 
     async def connect(self):
         self.exchange = ccxtpro.binance({
@@ -165,11 +169,25 @@ class BinanceWebsocketManager:
                 ticker = await self.exchange.watch_ticker(self.symbol)
                 current_price = ticker.get('last')
                 logger.debug(f"[watch_price] Получена цена: {current_price} для {self.symbol}")
-                
-                if current_price:
-                    price_cache[self.symbol] = current_price
-                
+
+                if not current_price:
+                    logger.debug("[watch_price] No price in ticker")
+                    continue
+
+                price_cache[self.symbol] = current_price
+
                 await self._check_grid_shift(ticker)
+
+                async with self.session_factory() as session:
+                    stmt = select(DcaCycle).where(
+                        DcaCycle.config_id == self.config_id,
+                        DcaCycle.status == CycleStatus.OPEN
+                    )
+                    result = await session.execute(stmt)
+                    cycle = result.scalar_one_or_none()
+
+                    if cycle and cycle.current_tp_order_id:
+                        await self._check_trailing_tp(cycle, current_price, session)
                     
             except Exception as e:
                 logger.error(f"Ошибка в цикле watch_price: {type(e).__name__}: {e}")
@@ -262,7 +280,94 @@ class BinanceWebsocketManager:
                     self._last_shift_time = time.time()
                     logger.info(f"Сетка успешно сдвинута для цикла {cycle.id}")
 
+    async def _check_trailing_tp(self, cycle, current_price: float, session):
+        """
+        Проверяет и обновляет trailing TP
+
+        Вызывается при каждом обновлении цены (каждые ~5 секунд)
+
+        Выполняет:
+        1. Проверку активации
+        2. Обновление max price
+        3. Проверку exit условий
+        4. EMERGENCY EXIT monitoring
+        5. Обновление TP ордера
+        """
+        config = await session.get(BotConfig, cycle.config_id)
+        if not config or not config.trailing_enabled:
+            return
+
+        if cycle.id not in self._trailing_managers:
+            self._trailing_managers[cycle.id] = TrailingTPManager(
+                self.exchange,
+                config
+            )
+
+        manager = self._trailing_managers[cycle.id]
+
+        if cycle.trailing_active:
+            emergency = await manager.monitor_emergency_exit(
+                cycle,
+                current_price,
+                session
+            )
+
+            if emergency:
+                logger.info(f"Аварийный выход выполнен для цикла {cycle.id}")
+
+                if cycle.id in self._trailing_managers:
+                    del self._trailing_managers[cycle.id]
+
+                await session.commit()
+                return
+
+        if not cycle.trailing_active:
+            should_activate, starting_max = await manager.should_activate(
+                cycle,
+                current_price
+            )
+
+            if should_activate:
+                await manager.activate(cycle, current_price, starting_max)
+                await session.commit()
+                return
+
+        if cycle.trailing_active:
+            max_updated = manager.update_max_price(cycle, current_price)
+
+            if max_updated:
+                adaptive_callback = await manager.get_adaptive_callback(config.symbol)
+
+                callback_price = manager.calculate_callback_price(
+                    float(cycle.max_price_tracked),
+                    adaptive_callback
+                )
+
+                min_change_threshold = float(cycle.current_tp_price) * 0.002
+
+                if abs(callback_price - float(cycle.current_tp_price)) > min_change_threshold:
+                    utils = TradingUtils(self.exchange)
+
+                    amount = float(cycle.total_base_qty or 0)
+
+                    safe_amount = await utils.round_amount(config.symbol, amount)
+                    safe_price = await utils.round_price(config.symbol, callback_price)
+
+                    await manager.create_or_update_tp_order(
+                        cycle,
+                        safe_price,
+                        safe_amount,
+                        config.symbol,
+                        session
+                    )
+
+            await session.commit()
+
     async def stop(self):
         self._is_running = False
+
+        self._trailing_managers.clear()
+        logger.debug("Trailing managers cleared")
+
         if self.exchange:
             await self.exchange.close()
