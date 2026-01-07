@@ -150,10 +150,6 @@ class OrderHandler:
             f"[OrderHandler] Обновлен цикл {cycle.id}: base_qty={cycle.total_base_qty}, quote_spent={cycle.total_quote_spent}, avg_price={cycle.avg_price}"
         )
 
-        tp_price = avg_price * (
-            Decimal("1") + Decimal(str(config.take_profit_pct)) / Decimal("100")
-        )
-
         if cycle.current_tp_order_id:
             try:
                 await self.exchange.cancel_order(
@@ -207,10 +203,10 @@ class OrderHandler:
                         f"Отклонение: {deviation_pct:.2f}% (порог: 5.0%)"
                     )
                     logger.error(
-                        f"[OrderHandler] Возможные причины: "
-                        f"1) Ручной вывод/пополнение, "
-                        f"2) Несколько ботов на одном аккаунте, "
-                        f"3) Ошибка данных API"
+                        "[OrderHandler] Возможные причины: "
+                        "1) Ручной вывод/пополнение, "
+                        "2) Несколько ботов на одном аккаунте, "
+                        "3) Ошибка данных API"
                     )
                     return
 
@@ -246,7 +242,7 @@ class OrderHandler:
             else:
                 amount_to_sell = available_base
                 logger.warning(
-                    f"[OrderHandler] Нет ожидаемого количества в БД, используем доступный баланс"
+                    "[OrderHandler] Нет ожидаемого количества в БД, используем доступный баланс"
                 )
 
             if amount_to_sell <= 0:
@@ -467,7 +463,7 @@ class OrderHandler:
         cycle.closed_at = datetime.utcnow()
         cycle.accumulated_dust = 0.0
         logger.info(
-            f"[OrderHandler] Накопленная пыль сброшена до 0 для следующего цикла"
+            "[OrderHandler] Накопленная пыль сброшена до 0 для следующего цикла"
         )
         active_orders = await self.session.execute(
             select(Order).where(
@@ -481,7 +477,7 @@ class OrderHandler:
             except Exception as e:
                 logger.error(f"Не удалось отменить ордер {order.binance_order_id}: {e}")
 
-        logger.info(f"Детали TP-ордера с биржи:")
+        logger.info("Детали TP-ордера с биржи:")
         logger.info(f"  id: {binance_order.get('id')}")
         logger.info(f"  цена: {binance_order.get('price')}")
         logger.info(f"  количество: {binance_order.get('amount')}")
@@ -562,7 +558,7 @@ class OrderHandler:
             await old_ws_manager.stop()
             await websocket_registry.remove(config.id)
             await asyncio.sleep(0.5)
-            logger.info(f"Старый WebSocket менеджер остановлен")
+            logger.info("Старый WebSocket менеджер остановлен")
 
         manager = BotManager(self.session)
         await manager.start_first_cycle(config)

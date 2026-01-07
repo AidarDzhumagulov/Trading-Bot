@@ -103,7 +103,7 @@ class BotManager:
                 await old_ws_manager.stop()
                 await websocket_registry.remove(config.id)
                 await asyncio.sleep(0.5)
-                logger.info(f"Old WebSocket stopped successfully")
+                logger.info("Old WebSocket stopped successfully")
 
             ws_manager = BinanceWebsocketManager(
                 api_key=config.binance_api_key,

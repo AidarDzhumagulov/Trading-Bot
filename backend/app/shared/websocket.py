@@ -4,7 +4,7 @@ import traceback
 import ccxt.pro as ccxtpro
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from typing import Callable, TYPE_CHECKING
+from typing import Callable
 from uuid import UUID
 
 from app.infrastructure.persistence.sqlalchemy.models import DcaCycle, Order, BotConfig
@@ -15,9 +15,6 @@ from app.core.config import settings
 from app.domain.trailing_tp import TrailingTPManager
 from app.shared.exchange_helper import TradingUtils
 
-if TYPE_CHECKING:
-    from app.domain.order_handler import OrderHandler
-    from app.domain.bot_manager import BotManager
 
 price_cache = {}
 
@@ -78,7 +75,7 @@ class BinanceWebsocketManager:
             try:
                 if not self.exchange:
                     logger.warning(
-                        f"[watch_orders] Exchange не инициализирован, переподключение..."
+                        "[watch_orders] Exchange не инициализирован, переподключение..."
                     )
                     await self.connect()
 
@@ -124,7 +121,7 @@ class BinanceWebsocketManager:
                             )
                             if filled > 0:
                                 logger.info(
-                                    f"[watch_orders] Обрабатываем частичное исполнение как filled"
+                                    "[watch_orders] Обрабатываем частичное исполнение как filled"
                                 )
                                 await self._process_order_as_trade(order)
                         else:
@@ -132,7 +129,7 @@ class BinanceWebsocketManager:
                                 f"[watch_orders] Изменение статуса ордера {order_id}: {order_status}"
                             )
                 else:
-                    logger.debug(f"[watch_orders] Пустой список ордеров")
+                    logger.debug("[watch_orders] Пустой список ордеров")
 
             except Exception as e:
                 logger.error(f"Ошибка в цикле watch_orders: {type(e).__name__}: {e}")
@@ -155,7 +152,7 @@ class BinanceWebsocketManager:
             f"[process_order] Order данные: symbol={order.get('symbol')}, amount={order.get('amount')}, filled={order.get('filled')}, price={order.get('price')}"
         )
 
-        logger.info(f"[process_order] Raw order from exchange:")
+        logger.info("[process_order] Raw order from exchange:")
         logger.info(f"  filled: {order.get('filled')}")
         logger.info(f"  amount: {order.get('amount')}")
         logger.info(f"  average: {order.get('average')}")
@@ -198,7 +195,7 @@ class BinanceWebsocketManager:
             try:
                 if not self.exchange:
                     logger.warning(
-                        f"[watch_price] Exchange не инициализирован, переподключение..."
+                        "[watch_price] Exchange не инициализирован, переподключение..."
                     )
                     await self.connect()
 

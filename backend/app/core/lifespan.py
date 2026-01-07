@@ -1,5 +1,4 @@
 from contextlib import asynccontextmanager
-from app.core.config import settings
 
 from fastapi import FastAPI
 
