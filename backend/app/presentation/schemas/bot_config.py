@@ -2,7 +2,6 @@ from uuid import UUID
 from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
-from pydantic.alias_generators import to_camel
 
 
 class BotConfigCreate(BaseModel):
