@@ -6,6 +6,7 @@ from app.core.config import settings
 from app.presentation.routers.v1.user import router as user_router
 from app.presentation.routers.v1.bot_config import router as bot_config_router
 from app.presentation.routers.v1.cycle import router as cycle_router
+from app.presentation.routers.v1.auth import router as auth_router
 
 
 def create_app() -> FastAPI:
@@ -32,4 +33,5 @@ def create_app() -> FastAPI:
     app.include_router(user_router, prefix="/api/v1")
     app.include_router(bot_config_router, prefix="/api/v1")
     app.include_router(cycle_router, prefix="/api/v1")
+    app.include_router(auth_router, prefix="/api/v1")
     return app

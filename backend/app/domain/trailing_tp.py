@@ -1,5 +1,5 @@
 import time
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Optional, Tuple
 from app.core.logging import logger
 
@@ -179,7 +179,7 @@ class TrailingTPManager:
         """
         cycle.trailing_active = True
         cycle.trailing_activation_price = current_price
-        cycle.trailing_activation_time = datetime.utcnow()
+        cycle.trailing_activation_time = datetime.now(UTC)
 
         if starting_max_price:
             cycle.max_price_tracked = starting_max_price
@@ -499,7 +499,7 @@ class TrailingTPManager:
 
             cycle.emergency_exit = True
             cycle.emergency_exit_reason = reason
-            cycle.emergency_exit_time = datetime.utcnow()
+            cycle.emergency_exit_time = datetime.now(UTC)
 
             return True
 
