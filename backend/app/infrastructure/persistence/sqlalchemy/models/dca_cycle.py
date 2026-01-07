@@ -45,5 +45,7 @@ class DcaCycle(Base):
     emergency_exit_reason: Mapped[Optional[str]] = mapped_column(nullable=True)
     emergency_exit_time: Mapped[Optional[datetime]] = mapped_column(nullable=True)
 
+    current_tp_price: Mapped[Optional[float]] = mapped_column(nullable=True)
+
     config: Mapped["BotConfig"] = relationship(back_populates="cycles")
     orders: Mapped[List["Order"]] = relationship(back_populates="cycle")

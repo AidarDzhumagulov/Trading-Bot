@@ -395,6 +395,7 @@ class OrderHandler:
 
         tp_binance_id = str(tp_res["id"])
         cycle.current_tp_order_id = tp_binance_id
+        cycle.current_tp_price = safe_price
 
         new_tp_order = Order(
             cycle_id=cycle.id,
