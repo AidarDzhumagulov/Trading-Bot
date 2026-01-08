@@ -50,7 +50,6 @@ async def login(user_data: UserLogin, session: AsyncSession = Depends(get_sessio
     """
     repo = SqlAlchemyUserRepository(session)
     user = await repo.get_by_email(email=user_data.email)
-    print(f"THIS IS USER{user}, user_id={user.id}")
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     if not verify_password(
