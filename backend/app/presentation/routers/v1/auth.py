@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -7,7 +9,7 @@ from app.core.security import verify_password
 from app.infrastructure.persistence.sqlalchemy.repositories.user import (
     SqlAlchemyUserRepository,
 )
-from app.presentation.schemas.auth import TokenResponse, UserRegister
+from app.presentation.schemas.auth import TokenResponse, UserRegister, RefreshTokenRequest, LogoutRequest
 from app.presentation.schemas.user import UserLogin
 from app.shared.clients.redis import RedisClient
 
@@ -67,11 +69,11 @@ async def login(user_data: UserLogin, session: AsyncSession = Depends(get_sessio
 
 @router.post("/logout/")
 async def logout(
-    refresh_token: str,
+    request: LogoutRequest,
     redis_client: RedisClient = Depends(get_redis_client),
 ):
     """Logout user by revoking refresh token"""
-    payload = verify_token(refresh_token)
+    payload = verify_token(request.refresh_token)
 
     if payload.get("type") != "refresh":
         raise HTTPException(status_code=400, detail="Invalid token type")
@@ -82,3 +84,43 @@ async def logout(
     await redis_client.revoke_refresh_token(jti, exp)
 
     return {"message": "Successfully logged out"}
+
+
+@router.post("/refresh/", response_model=TokenResponse)
+async def refresh_access_token(
+    request: RefreshTokenRequest,
+    session: AsyncSession = Depends(get_session),
+    redis_client: RedisClient = Depends(get_redis_client)
+):
+    """
+    Refresh access token
+
+    :param request:
+    :param session:
+    :param redis_client:
+    :return:
+    """
+    payload = verify_token(token=request.refresh_token)
+
+    if payload.get("type") != "refresh":
+        raise HTTPException(status_code=401, detail="Invalid token type")
+
+    jti = payload.get("jti")
+    if await redis_client.is_token_revoked(jti=jti):
+        raise HTTPException(status_code=401, detail="Refresh token revoked")
+
+    user_id = UUID(payload.get("sub"))
+
+    repo = SqlAlchemyUserRepository(session)
+
+    user = await repo.get(id_=user_id)
+
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+
+    access_token = create_access_token(user.id, user.email)
+
+    return TokenResponse(
+        access_token=access_token,
+        refresh_token=request.refresh_token
+    )

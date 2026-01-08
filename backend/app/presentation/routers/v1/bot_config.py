@@ -1,9 +1,10 @@
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import get_session
+from app.core.dependencies import get_session, get_current_user
 from app.domain.bot_manager import BotManager
 from app.infrastructure.persistence.sqlalchemy.repositories.bot_config import (
     SqlAlchemyBotConfigRepository,
@@ -16,14 +17,18 @@ from app.presentation.schemas.bot_config import (
 )
 from app.shared.websocket_registry import websocket_registry
 
+if TYPE_CHECKING:
+    from app.infrastructure.persistence.sqlalchemy.models import User
+
 router = APIRouter(prefix="/bot_config", tags=["bot"])
 
 
 @router.post("/setup/", response_model=BotConfigResponse)
 async def setup_bot(
-    config_data: BotConfigCreate, session: AsyncSession = Depends(get_session)
+        config_data: BotConfigCreate, session: AsyncSession = Depends(get_session),
+        current_user: "User" = Depends(get_current_user)
 ):
-    repo = SqlAlchemyBotConfigRepository(session)
+    repo = SqlAlchemyBotConfigRepository(session=session, current_user=current_user)
     try:
         bot_config = await repo.create(bot_config=config_data)
         return BotConfigResponse.model_validate(bot_config)
@@ -76,11 +81,10 @@ async def stop_bot(config_id: UUID, session: AsyncSession = Depends(get_session)
 
 @router.patch("/{config_id}/", response_model=BotConfigResponse)
 async def update_bot_config(
-    config_id: UUID,
-    config_update: BotConfigUpdate,
-    session: AsyncSession = Depends(get_session),
+        config_id: UUID,
+        config_update: BotConfigUpdate,
+        session: AsyncSession = Depends(get_session),
 ):
-
     repo = SqlAlchemyBotConfigRepository(session)
 
     try:
@@ -92,7 +96,7 @@ async def update_bot_config(
 
 @router.get("/{config_id}/trailing-stats/", response_model=TrailingStatsResponse)
 async def get_trailing_stats(
-    config_id: UUID, session: AsyncSession = Depends(get_session)
+        config_id: UUID, session: AsyncSession = Depends(get_session)
 ):
     repo = SqlAlchemyBotConfigRepository(session)
 

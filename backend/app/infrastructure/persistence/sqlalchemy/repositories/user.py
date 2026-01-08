@@ -7,14 +7,12 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import hash_password
-from app.domain.bot_config.repositories import BotConfigRepository
-from app.infrastructure.persistence.sqlalchemy.models import BotConfig
+from app.domain.user.repositories import UserRepository
 from app.infrastructure.persistence.sqlalchemy.models import User
 from app.presentation.schemas.auth import UserRegister
-from app.presentation.schemas.bot_config import BotConfigUpdate
 
 
-class SqlAlchemyUserRepository(BotConfigRepository):
+class SqlAlchemyUserRepository(UserRepository):
     def __init__(self, session: AsyncSession):
         self.session = session
 
@@ -32,13 +30,13 @@ class SqlAlchemyUserRepository(BotConfigRepository):
         await self.session.refresh(user)
         return user
 
-    async def get(self, id_: UUID) -> BotConfig | None:
-        ...
+    async def get(self, id_: UUID) -> User | None:
+        return await self.session.get(entity=User, ident=id_)
 
     async def delete(self, id_: UUID) -> None:
         ...
 
-    async def update(self, id_: UUID, bot_config: BotConfigUpdate) -> BotConfig:
+    async def update(self, id_: UUID, user) -> User:
         ...
 
     async def exists(self, email: str) -> bool:
@@ -46,7 +44,7 @@ class SqlAlchemyUserRepository(BotConfigRepository):
         result = await self.session.execute(stmt)
         return result.scalar()
 
-    async def list(self) -> List[BotConfig]:
+    async def list(self) -> List[User]:
         ...
 
     async def get_by_email(self, email: str) -> User | None:
