@@ -1,7 +1,7 @@
 import asyncio
 import math
 from decimal import Decimal
-from datetime import datetime
+from datetime import datetime, UTC
 import ccxt
 
 from sqlalchemy import select, update
@@ -460,7 +460,7 @@ class OrderHandler:
         """
         db_order.status = OrderStatus.FILLED
         cycle.status = CycleStatus.CLOSED
-        cycle.closed_at = datetime.utcnow()
+        cycle.closed_at = datetime.now(UTC)
         cycle.accumulated_dust = 0.0
         logger.info(
             "[OrderHandler] Накопленная пыль сброшена до 0 для следующего цикла"

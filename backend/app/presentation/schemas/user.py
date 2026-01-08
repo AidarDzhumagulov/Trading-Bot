@@ -1,4 +1,7 @@
-from pydantic import BaseModel, Field, ConfigDict
+from datetime import datetime
+from uuid import UUID
+
+from pydantic import BaseModel, Field, ConfigDict, EmailStr
 
 
 class BalanceCheckRequest(BaseModel):
@@ -21,3 +24,18 @@ class BalanceCheckRequest(BaseModel):
 class BalanceResponse(BaseModel):
     free_usdt: float
     total_usdt: float
+
+
+class UserLogin(BaseModel):
+    email: EmailStr
+    password: str
+
+
+class UserResponse(BaseModel):
+    id: UUID
+    email: str
+    is_active: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True

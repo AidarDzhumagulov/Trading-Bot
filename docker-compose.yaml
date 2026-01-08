@@ -27,7 +27,7 @@ services:
       dockerfile: Dockerfile
     container_name: alembic_migrations
     working_dir: /app
-    command: [ "alembic", "-c", "alembic.ini", "upgrade", "head" ]
+    command: [ "uv", "run", "alembic", "-c", "alembic.ini", "upgrade", "head" ]
     env_file:
       - .env
     environment:
@@ -46,7 +46,7 @@ services:
       dockerfile: Dockerfile
     container_name: backend_api
     working_dir: /app
-    command: [ "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8070", "--reload" ]
+    command: [ "uv", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8070", "--reload" ]
     ports:
       - "8070:8070"
     env_file:
@@ -56,6 +56,7 @@ services:
       DB_HOST: db
     volumes:
       - ./backend:/app
+      - /app/.venv
     networks:
       - db
     depends_on:
@@ -84,8 +85,18 @@ services:
       - backend
     restart: unless-stopped
 
+  redis:
+    image: redis:7-alpine
+    container_name: trading_bot_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
 networks:
   db: { driver: bridge }
 
 volumes:
   db:
+  redis_data:

@@ -9,3 +9,7 @@ psycopg2-binary==2.9.11
 greenlet==3.2.4
 uvicorn==0.35.0
 pre-commit==4.5.1
+python-jose==3.5.0
+redis==7.1.0
+pydantic[email]
+bcrypt==4.1.2

@@ -1,13 +1,14 @@
 from typing import TYPE_CHECKING, List
 from uuid import UUID, uuid4
 
-from sqlalchemy import String, Text
+from sqlalchemy import String, Text, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 
 if TYPE_CHECKING:
     from app.infrastructure.persistence.sqlalchemy.models.dca_cycle import DcaCycle
+    from app.infrastructure.persistence.sqlalchemy.models import User
 
 
 class BotConfig(Base):
@@ -32,4 +33,7 @@ class BotConfig(Base):
     trailing_callback_pct: Mapped[float] = mapped_column(default=0.8, nullable=False)
     trailing_min_profit_pct: Mapped[float] = mapped_column(default=1.0, nullable=False)
 
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"), index=True)
+
     cycles: Mapped[List["DcaCycle"]] = relationship(back_populates="config")
+    user: Mapped["User"] = relationship(back_populates="bot_configs")

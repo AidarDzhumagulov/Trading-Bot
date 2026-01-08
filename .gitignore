@@ -31,3 +31,6 @@ build/
 .env
 .env.local
 *.local
+
+__uv_env__/
+.uv/cache/
