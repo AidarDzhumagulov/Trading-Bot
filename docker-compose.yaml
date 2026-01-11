@@ -54,14 +54,17 @@ services:
     environment:
       PYTHONPATH: /app
       DB_HOST: db
+      REDIS_HOST: redis
     volumes:
       - ./backend:/app
-      - /app/.venv
+      - backend_venv:/app/.venv
     networks:
       - db
     depends_on:
       alembic:
         condition: service_completed_successfully
+      redis:
+        condition: service_healthy
     restart: unless-stopped
 
   frontend:
@@ -92,7 +95,14 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    networks:
+      - db
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
 networks:
   db: { driver: bridge }
@@ -100,3 +110,4 @@ networks:
 volumes:
   db:
   redis_data:
+  backend_venv:

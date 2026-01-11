@@ -10,6 +10,10 @@ RUN apt-get update && apt-get install -y \
 
 COPY pyproject.toml uv.lock ./
 
+ENV UV_PYTHON_PREFERENCE=only-system
+ENV UV_SYSTEM_PYTHON=1
+ENV UV_LINK_MODE=copy
+
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir uv \
     && uv sync
