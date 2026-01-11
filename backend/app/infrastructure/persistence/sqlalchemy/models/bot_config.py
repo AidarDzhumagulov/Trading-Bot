@@ -1,7 +1,8 @@
+from datetime import datetime
 from typing import TYPE_CHECKING, List
 from uuid import UUID, uuid4
 
-from sqlalchemy import String, Text, ForeignKey
+from sqlalchemy import String, Text, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -16,6 +17,7 @@ class BotConfig(Base):
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     is_active: Mapped[bool] = mapped_column(default=False)
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     binance_api_key: Mapped[str] = mapped_column(String(255), nullable=False)
     binance_api_secret: Mapped[str] = mapped_column(Text, nullable=False)

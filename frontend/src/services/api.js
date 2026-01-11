@@ -113,6 +113,24 @@ const transformConfigForBackend = (config) => {
     }
 }
 
+export const transformConfigFromBackend = (backendConfig) => {
+    return {
+        apiKey: backendConfig.binanceApiKey || '',
+        apiSecret: backendConfig.binanceApiSecret || '',
+        market: backendConfig.symbol || 'ETH/USDT',
+        budget: backendConfig.totalBudget || 1000,
+        gridLength: backendConfig.gridLengthPct || 5.0,
+        firstOrderOffset: backendConfig.firstOrderOffsetPct || 0.05,
+        safetyOrdersCount: backendConfig.safetyOrdersCount || 5,
+        scaleStepVolume: backendConfig.volumeScalePct || 0,
+        priceStep: backendConfig.gridShiftThresholdPct || 2.0,
+        takeProfit: backendConfig.takeProfitPct || 2.0,
+        trailingEnabled: backendConfig.trailingEnabled || false,
+        trailingCallbackPct: backendConfig.trailingCallbackPct || 0.8,
+        trailingMinProfitPct: backendConfig.trailingMinProfitPct || 1.0,
+    }
+}
+
 export const setupBotConfig = async (config) => {
     try {
         const payload = transformConfigForBackend(config)
@@ -134,8 +152,26 @@ export const startBot = async (configId) => {
 
 export const getBotConfig = async (configId) => {
     try {
-        const response = await apiClient.get(`/api/v1/bot_config/${configId}`)
+        const response = await apiClient.get(`/api/v1/bot_config/${configId}/`)
         return convertKeysToCamelCase(response.data)
+    } catch (error) {
+        handleApiError(error)
+    }
+}
+
+export const listBotConfigs = async () => {
+    try {
+        const response = await apiClient.get('/api/v1/bot_config/')
+        return response.data.map(c => convertKeysToCamelCase(c))
+    } catch (error) {
+        handleApiError(error)
+    }
+}
+
+export const getLastActiveConfig = async () => {
+    try {
+        const response = await apiClient.get('/api/v1/bot_config/last-active/')
+        return response.data ? convertKeysToCamelCase(response.data) : null
     } catch (error) {
         handleApiError(error)
     }
@@ -206,6 +242,8 @@ export default {
     setupBotConfig,
     startBot,
     getBotConfig,
+    listBotConfigs,
+    getLastActiveConfig,
     getCycle,
     stopBot,
     checkBalance,

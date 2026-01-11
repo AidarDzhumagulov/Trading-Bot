@@ -636,7 +636,7 @@
 <script setup>
 import {computed, onMounted, onUnmounted, ref} from 'vue'
 import {useRouter} from 'vue-router'
-import {loadConfigId, saveConfigId, clearConfigId, loadConfig, saveConfig} from '../stores/storage.js'
+import {loadConfigId, saveConfigId, clearConfigId, clearAllConfigData, loadConfig, saveConfig} from '../stores/storage.js'
 import {
   ActivityIcon,
   AlertOctagonIcon,
@@ -650,7 +650,17 @@ import {
   SettingsIcon,
   TrendingUpIcon
 } from 'lucide-vue-next'
-import {checkBalance, getStats, getTrailingStats, setupBotConfig, startBot as apiStartBot, stopBot as apiStopBot} from '../services/api.js'
+import {
+  checkBalance,
+  getStats,
+  getTrailingStats,
+  setupBotConfig,
+  startBot as apiStartBot,
+  stopBot as apiStopBot,
+  getLastActiveConfig,
+  getBotConfig,
+  transformConfigFromBackend
+} from '../services/api.js'
 import {logout} from '../services/auth.js'
 
 const router = useRouter()
@@ -991,6 +1001,30 @@ const resetCycle = () => {
 }
 
 onMounted(async () => {
+  try {
+    const lastActiveConfig = await getLastActiveConfig()
+    
+    if (lastActiveConfig) {
+      configId.value = lastActiveConfig.id
+      config.value = transformConfigFromBackend(lastActiveConfig)
+      saveConfigId(configId.value)
+      saveConfig(config.value)
+      
+      const stats = await getStats(configId.value)
+      if (stats.currentCycle) {
+        botStatus.value = 'active'
+        startStatsPolling()
+      } else {
+        botStatus.value = 'waiting'
+        await updateStats()
+        await updateTrailingStats()
+      }
+      return
+    }
+  } catch (error) {
+    console.warn('Failed to load config from backend:', error)
+  }
+
   const savedConfigId = loadConfigId()
   const savedConfig = loadConfig()
 
@@ -1000,6 +1034,12 @@ onMounted(async () => {
 
       if (savedConfig) {
         config.value = savedConfig
+      } else {
+        const backendConfig = await getBotConfig(savedConfigId)
+        if (backendConfig) {
+          config.value = transformConfigFromBackend(backendConfig)
+          saveConfig(config.value)
+        }
       }
 
       const stats = await getStats(savedConfigId)
@@ -1026,11 +1066,11 @@ onUnmounted(() => {
 const handleLogout = async () => {
   try {
     await logout()
-    clearConfigId()
+    clearAllConfigData()
     router.push('/login')
   } catch (error) {
     console.error('Logout error:', error)
-    clearConfigId()
+    clearAllConfigData()
     router.push('/login')
   }
 }

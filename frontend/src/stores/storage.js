@@ -16,6 +16,10 @@ export function saveConfigId(configId) {
 
 export function clearConfigId() {
     localStorage.removeItem(STORAGE_KEY_CONFIG_ID)
+}
+
+export function clearAllConfigData() {
+    localStorage.removeItem(STORAGE_KEY_CONFIG_ID)
     localStorage.removeItem(STORAGE_KEY_CONFIG)
 }
 

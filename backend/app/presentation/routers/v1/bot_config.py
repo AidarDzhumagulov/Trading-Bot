@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, List
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -23,6 +23,39 @@ if TYPE_CHECKING:
 router = APIRouter(prefix="/bot_config", tags=["bot"])
 
 
+@router.get("/", response_model=List[BotConfigResponse])
+async def list_configs(
+    session: AsyncSession = Depends(get_session),
+    current_user: "User" = Depends(get_current_user)
+):
+    repo = SqlAlchemyBotConfigRepository(session=session, current_user=current_user)
+    configs = await repo.list()
+    return [BotConfigResponse.model_validate(c) for c in configs]
+
+
+@router.get("/last-active/", response_model=BotConfigResponse | None)
+async def get_last_active_config(
+    session: AsyncSession = Depends(get_session),
+    current_user: "User" = Depends(get_current_user)
+):
+    repo = SqlAlchemyBotConfigRepository(session=session, current_user=current_user)
+    config = await repo.get_last_active()
+    if not config:
+        return None
+    return BotConfigResponse.model_validate(config)
+
+
+@router.get("/{config_id}/", response_model=BotConfigResponse)
+async def get_config(
+    config_id: UUID,
+    session: AsyncSession = Depends(get_session),
+    current_user: "User" = Depends(get_current_user)
+):
+    repo = SqlAlchemyBotConfigRepository(session=session, current_user=current_user)
+    config = await repo.get_by_id_for_user(config_id)
+    return BotConfigResponse.model_validate(config)
+
+
 @router.post("/setup/", response_model=BotConfigResponse)
 async def setup_bot(
         config_data: BotConfigCreate, session: AsyncSession = Depends(get_session),
@@ -37,27 +70,31 @@ async def setup_bot(
 
 
 @router.post("/{config_id}/start/")
-async def start_bot(config_id: UUID, session: AsyncSession = Depends(get_session)):
-    repo = SqlAlchemyBotConfigRepository(session)
-
-    config = await repo.get(config_id)
-    if not config:
-        raise HTTPException(status_code=404, detail="Config not found")
+async def start_bot(
+    config_id: UUID,
+    session: AsyncSession = Depends(get_session),
+    current_user: "User" = Depends(get_current_user)
+):
+    repo = SqlAlchemyBotConfigRepository(session=session, current_user=current_user)
+    config = await repo.get_by_id_for_user(config_id)
 
     try:
         result = await BotManager(session).start_first_cycle(config)
+        config.is_active = True
+        await session.commit()
         return result
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.post("/{config_id}/stop/")
-async def stop_bot(config_id: UUID, session: AsyncSession = Depends(get_session)):
-    repo = SqlAlchemyBotConfigRepository(session)
-
-    config = await repo.get(config_id)
-    if not config:
-        raise HTTPException(status_code=404, detail="Config not found")
+async def stop_bot(
+    config_id: UUID,
+    session: AsyncSession = Depends(get_session),
+    current_user: "User" = Depends(get_current_user)
+):
+    repo = SqlAlchemyBotConfigRepository(session=session, current_user=current_user)
+    config = await repo.get_by_id_for_user(config_id)
 
     ws_manager = websocket_registry.get(config_id)
     if not ws_manager:
@@ -81,11 +118,13 @@ async def stop_bot(config_id: UUID, session: AsyncSession = Depends(get_session)
 
 @router.patch("/{config_id}/", response_model=BotConfigResponse)
 async def update_bot_config(
-        config_id: UUID,
-        config_update: BotConfigUpdate,
-        session: AsyncSession = Depends(get_session),
+    config_id: UUID,
+    config_update: BotConfigUpdate,
+    session: AsyncSession = Depends(get_session),
+    current_user: "User" = Depends(get_current_user)
 ):
-    repo = SqlAlchemyBotConfigRepository(session)
+    repo = SqlAlchemyBotConfigRepository(session=session, current_user=current_user)
+    await repo.get_by_id_for_user(config_id)
 
     try:
         bot_config = await repo.update(id_=config_id, bot_config=config_update)
@@ -96,9 +135,12 @@ async def update_bot_config(
 
 @router.get("/{config_id}/trailing-stats/", response_model=TrailingStatsResponse)
 async def get_trailing_stats(
-        config_id: UUID, session: AsyncSession = Depends(get_session)
+    config_id: UUID,
+    session: AsyncSession = Depends(get_session),
+    current_user: "User" = Depends(get_current_user)
 ):
-    repo = SqlAlchemyBotConfigRepository(session)
+    repo = SqlAlchemyBotConfigRepository(session=session, current_user=current_user)
+    await repo.get_by_id_for_user(config_id)
 
     try:
         raw_stats = await repo.get_trailing_stats(config_id)

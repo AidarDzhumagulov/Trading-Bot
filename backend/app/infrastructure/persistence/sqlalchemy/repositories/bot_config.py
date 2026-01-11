@@ -62,10 +62,42 @@ class SqlAlchemyBotConfigRepository(BotConfigRepository):
         return response
 
     async def exists(self, id_: UUID) -> bool:
-        ...
+        bot_config = await self.session.get(BotConfig, id_)
+        return bot_config is not None
 
     async def list(self) -> List[BotConfig]:
-        ...
+        if not self.current_user:
+            raise HTTPException(status_code=401, detail="User not authenticated")
+        
+        stmt = select(BotConfig).where(BotConfig.user_id == self.current_user.id).order_by(BotConfig.created_at.desc())
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def get_last_active(self) -> BotConfig | None:
+        if not self.current_user:
+            raise HTTPException(status_code=401, detail="User not authenticated")
+        
+        stmt = (
+            select(BotConfig)
+            .where(BotConfig.user_id == self.current_user.id, BotConfig.is_active.is_(True))
+            .order_by(BotConfig.created_at.desc())
+            .limit(1)
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def get_by_id_for_user(self, id_: UUID) -> BotConfig | None:
+        if not self.current_user:
+            raise HTTPException(status_code=401, detail="User not authenticated")
+        
+        bot_config = await self.session.get(BotConfig, id_)
+        if not bot_config:
+            raise HTTPException(status_code=404, detail="BotConfig not found")
+        
+        if bot_config.user_id != self.current_user.id:
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        return bot_config
 
     async def get_trailing_stats(self, config_id: UUID) -> dict:
         config = await self.get(config_id)
