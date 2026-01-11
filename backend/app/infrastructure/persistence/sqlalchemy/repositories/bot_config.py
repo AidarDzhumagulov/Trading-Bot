@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, TYPE_CHECKING
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -11,16 +11,21 @@ from app.infrastructure.persistence.sqlalchemy.models import BotConfig, DcaCycle
 from app.infrastructure.persistence.sqlalchemy.models.dca_cycle import CycleStatus
 from app.presentation.schemas.bot_config import BotConfigCreate, BotConfigUpdate
 
+if TYPE_CHECKING:
+    from app.infrastructure.persistence.sqlalchemy.models import User
+
 
 class SqlAlchemyBotConfigRepository(BotConfigRepository):
-    def __init__(self, session: AsyncSession):
+    def __init__(self, session: AsyncSession, current_user: "User" = None):
         self.session = session
+        self.current_user = current_user
 
     def to_model(self, data: BotConfigCreate) -> BotConfig:
         return BotConfig(**data.model_dump())
 
     async def create(self, bot_config: BotConfigCreate) -> BotConfig:
         bot_config = self.to_model(bot_config)
+        bot_config.user = self.current_user
         self.session.add(bot_config)
         try:
             await self.session.commit()
@@ -102,8 +107,8 @@ class SqlAlchemyBotConfigRepository(BotConfigRepository):
             potential_profit_pct = None
             if current_cycle.max_price_tracked and current_cycle.avg_price:
                 potential_profit_pct = (
-                    (current_cycle.max_price_tracked / current_cycle.avg_price) - 1
-                ) * 100
+                                               (current_cycle.max_price_tracked / current_cycle.avg_price) - 1
+                                       ) * 100
 
             current_trailing_status = {
                 "cycle_id": str(current_cycle.id),

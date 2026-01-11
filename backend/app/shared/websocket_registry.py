@@ -50,5 +50,39 @@ class WebSocketRegistry:
         """Возвращает все активные менеджеры"""
         return list(self.managers.values())
 
+    async def stop_all(self, timeout: float = 10.0):
+        """
+        Останавливает все WebSocket менеджеры с таймаутом
+
+        Args:
+            timeout: Максимальное время ожидания (секунды)
+        """
+        async with self._lock:
+            if not self.managers:
+                logger.info("No WebSocket managers to stop")
+                return
+
+            logger.info(
+                f"Shutting down {len(self.managers)} WebSocket managers (timeout: {timeout}s)..."
+            )
+
+            stop_tasks = [
+                self._stop_manager_safely(manager, config_id)
+                for config_id, manager in self.managers.items()
+            ]
+
+            try:
+                await asyncio.wait_for(
+                    asyncio.gather(*stop_tasks, return_exceptions=True), timeout=timeout
+                )
+                logger.info("All managers stopped successfully")
+            except asyncio.TimeoutError:
+                logger.error(f"Timeout stopping managers after {timeout}s")
+            except Exception as e:
+                logger.error(f"Error during shutdown: {e}")
+            finally:
+                self.managers.clear()
+                logger.info("WebSocket registry cleared")
+
 
 websocket_registry = WebSocketRegistry()
