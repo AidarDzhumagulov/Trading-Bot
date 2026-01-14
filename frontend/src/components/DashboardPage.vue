@@ -82,6 +82,7 @@
               >
                 <option value="BTC/USDT">BTC/USDT</option>
                 <option value="ETH/USDT">ETH/USDT</option>
+                <option value="SOL/USDT">SOL/USDT</option>
               </select>
             </div>
 
@@ -915,7 +916,7 @@ const startStatsPolling = () => {
   if (statsPollingInterval) return
 
   updateStats()
-  statsPollingInterval = setInterval(updateStats, 3000)
+  statsPollingInterval = setInterval(updateStats, 60000)
 }
 
 const stopStatsPolling = () => {

@@ -17,7 +17,7 @@ class BotConfigCreate(BaseModel):
         max_length=100,
         examples=["TIwEZbwUQRz4ywXuzxC9a83ZG4nEZxVqwqCL0nNJCteHfiuxlCiYMyPI1YDhWPQy"],
     )
-    symbol: Literal["BTC/USDT", "ETH/USDT"] = Field(
+    symbol: Literal["BTC/USDT", "ETH/USDT", "SOL/USDT"] = Field(
         ..., description="Торговая пара. Разрешены только BTC/USDT или ETH/USDT"
     )
     total_budget: float = Field(

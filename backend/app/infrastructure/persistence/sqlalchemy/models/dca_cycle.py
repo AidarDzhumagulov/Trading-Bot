@@ -3,7 +3,7 @@ from enum import Enum
 from typing import TYPE_CHECKING, Optional, List
 from uuid import UUID, uuid4
 
-from sqlalchemy import ForeignKey, func
+from sqlalchemy import ForeignKey, func, TIMESTAMP
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -32,8 +32,8 @@ class DcaCycle(Base):
     initial_first_order_price: Mapped[Optional[float]] = mapped_column(nullable=True)
     profit_usdt: Mapped[Optional[float]] = mapped_column(nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
-    closed_at: Mapped[Optional[datetime]] = mapped_column(nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True),server_default=func.now())
+    closed_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     accumulated_dust: Mapped[float] = mapped_column(default=0.0, nullable=False)
 
     trailing_active: Mapped[bool] = mapped_column(default=False, nullable=False)
