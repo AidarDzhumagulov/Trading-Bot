@@ -75,9 +75,7 @@ class BotRecoveryService:
                 stats = self._get_recovery_stats()
 
                 logger.info("=" * 80)
-                logger.info(
-                    f"Bot recovery completed in {self.recovery_duration:.2f}s"
-                )
+                logger.info(f"Bot recovery completed in {self.recovery_duration:.2f}s")
                 logger.info(
                     f"Recovered: {self.recovered_count} | Failed: {self.failed_count}"
                 )
@@ -214,9 +212,7 @@ class BotRecoveryService:
         binance_order = binance_orders_map.get(local_order.binance_order_id)
 
         if binance_order:
-            logger.info(
-                f"Order {local_order.binance_order_id} still active on Binance"
-            )
+            logger.info(f"Order {local_order.binance_order_id} still active on Binance")
 
             if binance_order["status"] == "closed":
                 logger.info(
@@ -226,9 +222,7 @@ class BotRecoveryService:
                     local_order, binance_order, config, session, client
                 )
         else:
-            logger.warning(
-                f"Order {local_order.binance_order_id} not found on Binance"
-            )
+            logger.warning(f"Order {local_order.binance_order_id} not found on Binance")
 
             try:
                 order_details = await client.get_order(
@@ -258,9 +252,7 @@ class BotRecoveryService:
         client: BinanceClient,
     ):
         """Обработать ордер который исполнился во время downtime"""
-        logger.info(
-            f"Processing missed fill for order {local_order.binance_order_id}"
-        )
+        logger.info(f"Processing missed fill for order {local_order.binance_order_id}")
 
         try:
             filled_amount = binance_order.get("filled") or binance_order.get("amount")
@@ -291,9 +283,7 @@ class BotRecoveryService:
             raise
 
     @staticmethod
-    async def _check_if_cycle_closed(
-        cycle: DcaCycle, session: AsyncSession
-    ) -> bool:
+    async def _check_if_cycle_closed(cycle: DcaCycle, session: AsyncSession) -> bool:
         """Проверить не закрылся ли цикл во время downtime"""
         await session.refresh(cycle)
 
@@ -355,7 +345,9 @@ class BotRecoveryService:
             "total": self.recovered_count + self.failed_count,
             "duration_seconds": self.recovery_duration,
             "started_at": (
-                self.recovery_start_time.isoformat() if self.recovery_start_time else None
+                self.recovery_start_time.isoformat()
+                if self.recovery_start_time
+                else None
             ),
         }
 
