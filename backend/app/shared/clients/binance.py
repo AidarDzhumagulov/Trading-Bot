@@ -168,6 +168,11 @@ class BinanceClient:
         self._ensure_connected()
         return await self._exchange.fetch_order(order_id, symbol)
 
+    async def get_open_orders(self, symbol: str) -> list:
+        """Get all open orders for symbol"""
+        self._ensure_connected()
+        return await self._exchange.fetch_open_orders(symbol)
+
     async def get_ohlcv(
         self, symbol: str, timeframe: str = "5m", limit: int = 15
     ) -> list:
