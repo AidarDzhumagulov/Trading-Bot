@@ -9,7 +9,12 @@ from app.core.security import verify_password
 from app.infrastructure.persistence.sqlalchemy.repositories.user import (
     SqlAlchemyUserRepository,
 )
-from app.presentation.schemas.auth import TokenResponse, UserRegister, RefreshTokenRequest, LogoutRequest
+from app.presentation.schemas.auth import (
+    TokenResponse,
+    UserRegister,
+    RefreshTokenRequest,
+    LogoutRequest,
+)
 from app.presentation.schemas.user import UserLogin
 from app.shared.clients.redis import RedisClient
 
@@ -89,7 +94,7 @@ async def logout(
 async def refresh_access_token(
     request: RefreshTokenRequest,
     session: AsyncSession = Depends(get_session),
-    redis_client: RedisClient = Depends(get_redis_client)
+    redis_client: RedisClient = Depends(get_redis_client),
 ):
     """
     Refresh access token
@@ -119,7 +124,4 @@ async def refresh_access_token(
 
     access_token = create_access_token(user.id, user.email)
 
-    return TokenResponse(
-        access_token=access_token,
-        refresh_token=request.refresh_token
-    )
+    return TokenResponse(access_token=access_token, refresh_token=request.refresh_token)

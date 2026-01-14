@@ -95,9 +95,10 @@ class BotConfigResponse(BaseModel):
     grid_shift_threshold_pct: float
     take_profit_pct: float
 
-    trailing_enabled:bool
+    trailing_enabled: bool
     trailing_callback_pct: float
     trailing_min_profit_pct: float
+
 
 class BotConfigUpdate(BaseModel):
     total_budget: Optional[float] = Field(None, gt=10)

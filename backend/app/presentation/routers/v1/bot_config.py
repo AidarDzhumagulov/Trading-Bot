@@ -26,7 +26,7 @@ router = APIRouter(prefix="/bot_config", tags=["bot"])
 @router.get("/", response_model=List[BotConfigResponse])
 async def list_configs(
     session: AsyncSession = Depends(get_session),
-    current_user: "User" = Depends(get_current_user)
+    current_user: "User" = Depends(get_current_user),
 ):
     repo = SqlAlchemyBotConfigRepository(session=session, current_user=current_user)
     configs = await repo.list()
@@ -36,7 +36,7 @@ async def list_configs(
 @router.get("/last-active/", response_model=BotConfigResponse | None)
 async def get_last_active_config(
     session: AsyncSession = Depends(get_session),
-    current_user: "User" = Depends(get_current_user)
+    current_user: "User" = Depends(get_current_user),
 ):
     repo = SqlAlchemyBotConfigRepository(session=session, current_user=current_user)
     config = await repo.get_last_active()
@@ -49,7 +49,7 @@ async def get_last_active_config(
 async def get_config(
     config_id: UUID,
     session: AsyncSession = Depends(get_session),
-    current_user: "User" = Depends(get_current_user)
+    current_user: "User" = Depends(get_current_user),
 ):
     repo = SqlAlchemyBotConfigRepository(session=session, current_user=current_user)
     config = await repo.get_by_id_for_user(config_id)
@@ -58,8 +58,9 @@ async def get_config(
 
 @router.post("/setup/", response_model=BotConfigResponse)
 async def setup_bot(
-        config_data: BotConfigCreate, session: AsyncSession = Depends(get_session),
-        current_user: "User" = Depends(get_current_user)
+    config_data: BotConfigCreate,
+    session: AsyncSession = Depends(get_session),
+    current_user: "User" = Depends(get_current_user),
 ):
     repo = SqlAlchemyBotConfigRepository(session=session, current_user=current_user)
     try:
@@ -73,7 +74,7 @@ async def setup_bot(
 async def start_bot(
     config_id: UUID,
     session: AsyncSession = Depends(get_session),
-    current_user: "User" = Depends(get_current_user)
+    current_user: "User" = Depends(get_current_user),
 ):
     repo = SqlAlchemyBotConfigRepository(session=session, current_user=current_user)
     config = await repo.get_by_id_for_user(config_id)
@@ -89,7 +90,7 @@ async def start_bot(
 async def stop_bot(
     config_id: UUID,
     session: AsyncSession = Depends(get_session),
-    current_user: "User" = Depends(get_current_user)
+    current_user: "User" = Depends(get_current_user),
 ):
     repo = SqlAlchemyBotConfigRepository(session=session, current_user=current_user)
     config = await repo.get_by_id_for_user(config_id)
@@ -119,7 +120,7 @@ async def update_bot_config(
     config_id: UUID,
     config_update: BotConfigUpdate,
     session: AsyncSession = Depends(get_session),
-    current_user: "User" = Depends(get_current_user)
+    current_user: "User" = Depends(get_current_user),
 ):
     repo = SqlAlchemyBotConfigRepository(session=session, current_user=current_user)
     await repo.get_by_id_for_user(config_id)
@@ -135,7 +136,7 @@ async def update_bot_config(
 async def get_trailing_stats(
     config_id: UUID,
     session: AsyncSession = Depends(get_session),
-    current_user: "User" = Depends(get_current_user)
+    current_user: "User" = Depends(get_current_user),
 ):
     repo = SqlAlchemyBotConfigRepository(session=session, current_user=current_user)
     await repo.get_by_id_for_user(config_id)

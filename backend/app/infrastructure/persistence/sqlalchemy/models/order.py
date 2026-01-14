@@ -33,6 +33,8 @@ class Order(Base):
     price: Mapped[float] = mapped_column(nullable=False)
     amount: Mapped[float] = mapped_column(nullable=False)
     status: Mapped[OrderStatus] = mapped_column(default=OrderStatus.PENDING)
-    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=func.now()
+    )
 
     cycle: Mapped["DcaCycle"] = relationship(back_populates="orders")

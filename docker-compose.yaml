@@ -9,14 +9,18 @@ services:
       PGDATA: /data/postgres_trading
     volumes:
       - db:/data/postgres_trading
-    command: [ "postgres", "-p", "${DB_PORT}" ]
+    command: ["postgres", "-p", "${DB_PORT}"]
     ports:
       - "${DB_PORT}:${DB_PORT}"
     networks:
       - db
     restart: unless-stopped
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -h 127.0.0.1 -p ${DB_PORT} -U ${DB_USER} -d ${DB_NAME} || exit 1" ]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -h 127.0.0.1 -p ${DB_PORT} -U ${DB_USER} -d ${DB_NAME} || exit 1",
+        ]
       interval: 5s
       timeout: 5s
       retries: 12
@@ -27,7 +31,7 @@ services:
       dockerfile: Dockerfile
     container_name: alembic_migrations
     working_dir: /app
-    command: [ "uv", "run", "alembic", "-c", "alembic.ini", "upgrade", "head" ]
+    command: ["uv", "run", "alembic", "-c", "alembic.ini", "upgrade", "head"]
     env_file:
       - .env
     environment:
@@ -46,7 +50,18 @@ services:
       dockerfile: Dockerfile
     container_name: backend_api
     working_dir: /app
-    command: [ "uv", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8070", "--reload" ]
+    command:
+      [
+        "uv",
+        "run",
+        "uvicorn",
+        "main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8070",
+        "--reload",
+      ]
     ports:
       - "8070:8070"
     env_file:

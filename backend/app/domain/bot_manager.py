@@ -91,7 +91,9 @@ class BotManager:
 
                 await asyncio.sleep(1)
 
-                safe_amount = await utils.round_amount(config.symbol, first_order.amount)
+                safe_amount = await utils.round_amount(
+                    config.symbol, first_order.amount
+                )
                 safe_price = await utils.round_price(config.symbol, first_order.price)
 
                 if not await utils.check_min_notional(
@@ -196,7 +198,9 @@ class BotManager:
 
                 first_order = db_orders[0]
 
-                safe_amount = await utils.round_amount(config.symbol, first_order.amount)
+                safe_amount = await utils.round_amount(
+                    config.symbol, first_order.amount
+                )
                 safe_price = await utils.round_price(config.symbol, first_order.price)
 
                 if not await utils.check_min_notional(

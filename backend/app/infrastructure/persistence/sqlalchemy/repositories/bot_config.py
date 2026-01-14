@@ -68,18 +68,24 @@ class SqlAlchemyBotConfigRepository(BotConfigRepository):
     async def list(self) -> List[BotConfig]:
         if not self.current_user:
             raise HTTPException(status_code=401, detail="User not authenticated")
-        
-        stmt = select(BotConfig).where(BotConfig.user_id == self.current_user.id).order_by(BotConfig.created_at.desc())
+
+        stmt = (
+            select(BotConfig)
+            .where(BotConfig.user_id == self.current_user.id)
+            .order_by(BotConfig.created_at.desc())
+        )
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
     async def get_last_active(self) -> BotConfig | None:
         if not self.current_user:
             raise HTTPException(status_code=401, detail="User not authenticated")
-        
+
         stmt = (
             select(BotConfig)
-            .where(BotConfig.user_id == self.current_user.id, BotConfig.is_active.is_(True))
+            .where(
+                BotConfig.user_id == self.current_user.id, BotConfig.is_active.is_(True)
+            )
             .order_by(BotConfig.created_at.desc())
             .limit(1)
         )
@@ -89,14 +95,14 @@ class SqlAlchemyBotConfigRepository(BotConfigRepository):
     async def get_by_id_for_user(self, id_: UUID) -> BotConfig | None:
         if not self.current_user:
             raise HTTPException(status_code=401, detail="User not authenticated")
-        
+
         bot_config = await self.session.get(BotConfig, id_)
         if not bot_config:
             raise HTTPException(status_code=404, detail="BotConfig not found")
-        
+
         if bot_config.user_id != self.current_user.id:
             raise HTTPException(status_code=403, detail="Access denied")
-        
+
         return bot_config
 
     async def get_trailing_stats(self, config_id: UUID) -> dict:
@@ -139,8 +145,8 @@ class SqlAlchemyBotConfigRepository(BotConfigRepository):
             potential_profit_pct = None
             if current_cycle.max_price_tracked and current_cycle.avg_price:
                 potential_profit_pct = (
-                                               (current_cycle.max_price_tracked / current_cycle.avg_price) - 1
-                                       ) * 100
+                    (current_cycle.max_price_tracked / current_cycle.avg_price) - 1
+                ) * 100
 
             current_trailing_status = {
                 "cycle_id": str(current_cycle.id),
