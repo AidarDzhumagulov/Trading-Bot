@@ -266,7 +266,8 @@ class OrderHandler:
                     f"Не удалось отменить ордер {order.binance_order_id}: {e}"
                 )
 
-    def _log_tp_order_details(self, binance_order: dict, db_order: Order):
+    @staticmethod
+    def _log_tp_order_details(binance_order: dict, db_order: Order):
         """Log TP order details for debugging"""
         logger.info("Детали TP-ордера с биржи:")
         logger.info(f"  id: {binance_order.get('id')}")

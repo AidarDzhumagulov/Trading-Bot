@@ -1,7 +1,6 @@
 import asyncio
 import time
 import traceback
-import ccxt.pro as ccxtpro
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import Callable
@@ -11,8 +10,8 @@ from app.infrastructure.persistence.sqlalchemy.models import DcaCycle, Order, Bo
 from app.infrastructure.persistence.sqlalchemy.models.dca_cycle import CycleStatus
 from app.infrastructure.persistence.sqlalchemy.models.order import OrderStatus
 from app.core.logging import logger
-from app.core.config import settings
 from app.domain.trailing_tp import TrailingTPManager
+from app.shared.clients import BinanceWebSocketClient
 from app.shared.exchange_helper import TradingUtils
 
 
@@ -33,23 +32,21 @@ class BinanceWebsocketManager:
         self.session_factory = session_factory
         self.config_id = config_id
         self.symbol = symbol
-        self.exchange = None
+        self._client: BinanceWebSocketClient | None = None
         self._is_running = False
         self._last_shift_time = None
         self._shift_lock = asyncio.Lock()
 
         self._trailing_managers = {}
 
+    @property
+    def exchange(self):
+        """Raw exchange access for compatibility with OrderHandler, TradingUtils"""
+        return self._client.exchange if self._client else None
+
     async def connect(self):
-        self.exchange = ccxtpro.binance(
-            {
-                "apiKey": self.api_key,
-                "secret": self.api_secret,
-                "enableRateLimit": True,
-            }
-        )
-        if settings.ENVIRONMENT == "DEV":
-            self.exchange.set_sandbox_mode(True)
+        self._client = BinanceWebSocketClient(self.api_key, self.api_secret)
+        await self._client.connect()
         self._is_running = True
 
     async def run_forever(self):
@@ -73,16 +70,16 @@ class BinanceWebsocketManager:
         )
         while self._is_running:
             try:
-                if not self.exchange:
+                if not self._client or not self._client.is_connected:
                     logger.warning(
-                        "[watch_orders] Exchange не инициализирован, переподключение..."
+                        "[watch_orders] Client не инициализирован, переподключение..."
                     )
                     await self.connect()
 
                 logger.debug(
                     f"[watch_orders] Ожидание обновлений ордеров для {self.symbol}..."
                 )
-                orders = await self.exchange.watch_orders(self.symbol)
+                orders = await self._client.watch_orders(self.symbol)
                 logger.debug(
                     f"[watch_orders] Получено обновление: {len(orders)} ордеров"
                 )
@@ -193,16 +190,16 @@ class BinanceWebsocketManager:
         logger.info(f"[watch_price] Начало цикла мониторинга цены для {self.symbol}")
         while self._is_running:
             try:
-                if not self.exchange:
+                if not self._client or not self._client.is_connected:
                     logger.warning(
-                        "[watch_price] Exchange не инициализирован, переподключение..."
+                        "[watch_price] Client не инициализирован, переподключение..."
                     )
                     await self.connect()
 
                 logger.debug(
                     f"[watch_price] Ожидание обновления цены для {self.symbol}..."
                 )
-                ticker = await self.exchange.watch_ticker(self.symbol)
+                ticker = await self._client.watch_ticker(self.symbol)
                 current_price = ticker.get("last")
                 logger.debug(
                     f"[watch_price] Получена цена: {current_price} для {self.symbol}"
@@ -416,5 +413,6 @@ class BinanceWebsocketManager:
         self._trailing_managers.clear()
         logger.debug("Trailing managers cleared")
 
-        if self.exchange:
-            await self.exchange.close()
+        if self._client:
+            await self._client.close()
+            self._client = None

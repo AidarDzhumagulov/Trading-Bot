@@ -115,8 +115,8 @@ const transformConfigForBackend = (config) => {
 
 export const transformConfigFromBackend = (backendConfig) => {
     return {
-        apiKey: backendConfig.binanceApiKey || '',
-        apiSecret: backendConfig.binanceApiSecret || '',
+        apiKey: '',
+        apiSecret: '',
         market: backendConfig.symbol || 'ETH/USDT',
         budget: backendConfig.totalBudget || 1000,
         gridLength: backendConfig.gridLengthPct || 5.0,

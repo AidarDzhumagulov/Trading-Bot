@@ -726,6 +726,8 @@ const dashboard = ref({
     expectedProfit: 0,
     unrealizedProfit: 0,
     accumulatedDust: 0,
+    potentialProfitPct: 0,
+
   }
 })
 
@@ -1008,6 +1010,8 @@ onMounted(async () => {
     if (lastActiveConfig) {
       configId.value = lastActiveConfig.id
       config.value = transformConfigFromBackend(lastActiveConfig)
+      console.log("THIS IS CONFIG", config.value)
+      console.log("THIS IS LAST CONFIG", lastActiveConfig)
       saveConfigId(configId.value)
       saveConfig(config.value)
       
@@ -1035,9 +1039,11 @@ onMounted(async () => {
 
       if (savedConfig) {
         config.value = savedConfig
+        console.log(savedConfig)
       } else {
         const backendConfig = await getBotConfig(savedConfigId)
         if (backendConfig) {
+          console.log(backendConfig)
           config.value = transformConfigFromBackend(backendConfig)
           saveConfig(config.value)
         }
