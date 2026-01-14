@@ -1,19 +1,19 @@
 import asyncio
+
 from ccxt import async_support
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from sqlalchemy import select
-
-from app.infrastructure.persistence.sqlalchemy.models import DcaCycle, Order
-from app.infrastructure.persistence.sqlalchemy.models.dca_cycle import CycleStatus
-from app.shared.utils import calculate_grid
-from app.infrastructure.persistence.sqlalchemy.models.order import OrderStatus
-from app.shared.websocket import BinanceWebsocketManager
-from app.shared.websocket_registry import websocket_registry
-from app.shared.exchange_helper import TradingUtils
+from app.core.config import settings
 from app.core.dependencies import get_session_factory
 from app.core.logging import logger
-from app.core.config import settings
+from app.infrastructure.persistence.sqlalchemy.models import DcaCycle, Order
+from app.infrastructure.persistence.sqlalchemy.models.dca_cycle import CycleStatus
+from app.infrastructure.persistence.sqlalchemy.models.order import OrderStatus
+from app.shared.exchange_helper import TradingUtils
+from app.shared.utils import GridConfig, GridCalculator
+from app.shared.websocket import BinanceWebsocketManager
+from app.shared.websocket_registry import websocket_registry
 
 
 class BotManager:
@@ -59,7 +59,7 @@ class BotManager:
             amount_precision = await utils.get_amount_precision(config.symbol)
             price_precision = await utils.get_price_precision(config.symbol)
 
-            grid_data = calculate_grid(
+            grid_config = GridConfig(
                 current_price=current_price,
                 total_budget=effective_budget,
                 grid_levels=config.safety_orders_count,
@@ -69,6 +69,8 @@ class BotManager:
                 amount_precision=amount_precision,
                 price_precision=price_precision,
             )
+            calculator = GridCalculator(grid_config)
+            grid_data = calculator.calculate()
 
             logger.info(
                 f"Starting cycle with budget: {effective_budget:.2f} USDT (available: {free_usdt:.2f})"
@@ -88,8 +90,8 @@ class BotManager:
                     amount=item["amount_base"],
                     status=OrderStatus.PENDING,
                 )
-                self.session.add(new_order)
                 db_orders.append(new_order)
+            self.session.add_all(db_orders)
 
             first_order = db_orders[0]
 
@@ -139,6 +141,7 @@ class BotManager:
 
             first_order.binance_order_id = str(binance_res["id"])
             first_order.status = OrderStatus.ACTIVE
+            config.is_active = True
             await self.session.commit()
             logger.info(
                 f"[BotManager] Первый ордер создан: binance_id={first_order.binance_order_id}, order_id={first_order.id}"
@@ -214,7 +217,7 @@ class BotManager:
             amount_precision = await utils.get_amount_precision(config.symbol)
             price_precision = await utils.get_price_precision(config.symbol)
 
-            grid_data = calculate_grid(
+            grid_config = GridConfig(
                 current_price=current_price,
                 total_budget=config.total_budget,
                 grid_levels=config.safety_orders_count,
@@ -224,6 +227,9 @@ class BotManager:
                 amount_precision=amount_precision,
                 price_precision=price_precision,
             )
+
+            calculator = GridCalculator(grid_config)
+            grid_data = calculator.calculate()
 
             db_orders = []
             for item in grid_data:

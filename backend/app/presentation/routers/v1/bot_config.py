@@ -80,8 +80,6 @@ async def start_bot(
 
     try:
         result = await BotManager(session).start_first_cycle(config)
-        config.is_active = True
-        await session.commit()
         return result
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
