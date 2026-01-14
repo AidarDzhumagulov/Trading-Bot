@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 class GridOrder(TypedDict):
     """Typed dictionary for grid order structure."""
+
     index: int
     price: float
     amount_usdt: float
@@ -17,6 +18,7 @@ class GridConfig:
 
     All percentage values should be in range 0-100 (e.g., 5.0 for 5%).
     """
+
     current_price: float
     total_budget: float
     grid_levels: int
@@ -73,7 +75,7 @@ class GridCalculator:
             self._create_order(
                 index=i,
                 price=first_price - (i * price_step),
-                volume_usdt=first_order_volume * self._get_volume_multiplier(i)
+                volume_usdt=first_order_volume * self._get_volume_multiplier(i),
             )
             for i in range(self.config.grid_levels)
         ]
@@ -103,12 +105,12 @@ class GridCalculator:
 
         """
         multiplier = self._get_volume_multiplier(1)
-        return sum(multiplier ** i for i in range(self.config.grid_levels))
+        return sum(multiplier**i for i in range(self.config.grid_levels))
 
     def _get_volume_multiplier(self, order_index: int) -> float:
         """Get volume multiplier for order at given index."""
         base_multiplier = 1 + (self.config.volume_scale_pct / 100)
-        return base_multiplier ** order_index
+        return base_multiplier**order_index
 
     def _create_order(self, index: int, price: float, volume_usdt: float) -> GridOrder:
         """
@@ -129,9 +131,8 @@ class GridCalculator:
             price=round(price, self.config.price_precision),
             amount_usdt=round(volume_usdt, 2),
             amount_base=self._truncate_to_precision(
-                amount_base,
-                self.config.amount_precision
-            )
+                amount_base, self.config.amount_precision
+            ),
         )
 
     @staticmethod

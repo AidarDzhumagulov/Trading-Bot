@@ -31,16 +31,16 @@ from app.shared.websocket_registry import websocket_registry
 class OrderHandler:
     """
     Handles filled order events from exchange.
-    
+
     Coordinates multiple services to process:
     - Buy order fills (update cycle, create TP, place next order)
     - Sell/TP order fills (close cycle, calculate profit, start new cycle)
     """
-    
+
     def __init__(self, session: AsyncSession, exchange):
         self.session = session
         self.exchange = exchange
-        
+
         self.fee_calculator = FeeCalculator(exchange)
         self.cycle_updater = CycleUpdater()
         self.balance_validator = BalanceValidator(exchange)
@@ -52,7 +52,7 @@ class OrderHandler:
     async def handle_filled_order(self, binance_order: dict):
         """
         Main entry point for processing filled orders.
-        
+
         Routes to appropriate handler based on order type.
         """
         binance_id = str(binance_order["id"])
@@ -72,22 +72,23 @@ class OrderHandler:
         config = await self.session.get(BotConfig, cycle.config_id)
 
         if db_order.order_type == "BUY_SAFETY":
-            await self._handle_buy_fill(db_order=db_order, cycle=cycle, config=config, binance_order=binance_order)
+            await self._handle_buy_fill(
+                db_order=db_order,
+                cycle=cycle,
+                config=config,
+                binance_order=binance_order,
+            )
         elif db_order.order_type == "SELL_TP":
             await self._handle_tp_fill(db_order, cycle, config, binance_order)
 
         await self.session.commit()
 
     async def _find_or_create_order(
-        self,
-        binance_id: str,
-        binance_order: dict
+        self, binance_id: str, binance_order: dict
     ) -> Order | None:
         """Find order in DB or create if it's a TP order found via cycle"""
         stmt = (
-            select(Order)
-            .where(Order.binance_order_id == binance_id)
-            .with_for_update()
+            select(Order).where(Order.binance_order_id == binance_id).with_for_update()
         )
         result = await self.session.execute(stmt)
         db_order = result.scalar_one_or_none()
@@ -110,30 +111,22 @@ class OrderHandler:
                 order_type="SELL_TP",
                 order_index=-1,
                 price=float(binance_order.get("price", 0)),
-                amount=float(
-                    binance_order.get("amount", cycle_with_tp.total_base_qty)
-                ),
+                amount=float(binance_order.get("amount", cycle_with_tp.total_base_qty)),
                 status=OrderStatus.ACTIVE,
             )
             self.session.add(db_order)
             await self.session.flush()
             return db_order
 
-        logger.error(
-            f"[OrderHandler] Ордер {binance_id} не найден в БД. Пропускаем."
-        )
+        logger.error(f"[OrderHandler] Ордер {binance_id} не найден в БД. Пропускаем.")
         return None
 
     async def _handle_buy_fill(
-        self,
-        db_order: Order,
-        cycle: DcaCycle,
-        config: BotConfig,
-        binance_order: dict
+        self, db_order: Order, cycle: DcaCycle, config: BotConfig, binance_order: dict
     ):
         """
         Handle buy order fill event.
-        
+
         Steps:
         1. Calculate fees and net quantity
         2. Update cycle statistics
@@ -151,7 +144,7 @@ class OrderHandler:
         fill_result = await self.fee_calculator.calculate_fill_result(
             binance_order=binance_order,
             symbol=config.symbol,
-            order_price=db_order.price
+            order_price=db_order.price,
         )
 
         cycle_stats = self.cycle_updater.update_after_buy(cycle, fill_result)
@@ -163,8 +156,7 @@ class OrderHandler:
 
         try:
             balance_result = await self.balance_validator.validate_for_sell(
-                symbol=config.symbol,
-                expected_amount=float(cycle.total_base_qty)
+                symbol=config.symbol, expected_amount=float(cycle.total_base_qty)
             )
         except (InsufficientBalanceError, BalanceDeviationError) as e:
             logger.error(f"[OrderHandler] Ошибка валидации баланса: {e.message}")
@@ -173,15 +165,13 @@ class OrderHandler:
         dust_result = await self.dust_manager.process_dust(
             amount=balance_result.amount_to_sell,
             accumulated_dust=float(cycle.accumulated_dust or 0.0),
-            symbol=config.symbol
+            symbol=config.symbol,
         )
-        
+
         cycle.accumulated_dust = dust_result.new_dust
 
         if dust_result.sellable_amount <= 0:
-            logger.error(
-                "[OrderHandler] Количество после обработки пыли равно нулю"
-            )
+            logger.error("[OrderHandler] Количество после обработки пыли равно нулю")
             return
 
         market = await self.utils.get_market(config.symbol)
@@ -191,7 +181,7 @@ class OrderHandler:
             cycle_stats=cycle_stats,
             config_tp_pct=float(config.take_profit_pct),
             symbol=config.symbol,
-            amount_precision=amount_precision
+            amount_precision=amount_precision,
         )
 
         try:
@@ -200,28 +190,22 @@ class OrderHandler:
                 symbol=config.symbol,
                 amount=dust_result.sellable_amount,
                 price=tp_params.tp_price,
-                effective_tp_pct=tp_params.effective_tp_pct
+                effective_tp_pct=tp_params.effective_tp_pct,
             )
         except (MinNotionalError, OrderCreationError) as e:
             logger.error(f"[OrderHandler] Ошибка создания TP: {e.message}")
             return
 
         await self.order_placer.place_next_safety_order(
-            cycle=cycle,
-            current_order_index=db_order.order_index,
-            symbol=config.symbol
+            cycle=cycle, current_order_index=db_order.order_index, symbol=config.symbol
         )
 
     async def _handle_tp_fill(
-        self,
-        db_order: Order,
-        cycle: DcaCycle,
-        config: BotConfig,
-        binance_order: dict
+        self, db_order: Order, cycle: DcaCycle, config: BotConfig, binance_order: dict
     ):
         """
         Handle take profit (sell) order fill.
-        
+
         Steps:
         1. Mark order and cycle as closed
         2. Cancel remaining active orders
@@ -233,10 +217,8 @@ class OrderHandler:
         cycle.status = CycleStatus.CLOSED
         cycle.closed_at = datetime.now(UTC)
         cycle.accumulated_dust = 0.0
-        
-        logger.info(
-            "[OrderHandler] Накопленная пыль сброшена для следующего цикла"
-        )
+
+        logger.info("[OrderHandler] Накопленная пыль сброшена для следующего цикла")
 
         await self._cancel_remaining_orders(cycle, config.symbol)
 
@@ -252,19 +234,16 @@ class OrderHandler:
     async def _cancel_remaining_orders(self, cycle: DcaCycle, symbol: str):
         """Cancel all active orders for cycle"""
         stmt = select(Order).where(
-            Order.cycle_id == cycle.id,
-            Order.status == OrderStatus.ACTIVE
+            Order.cycle_id == cycle.id, Order.status == OrderStatus.ACTIVE
         )
         result = await self.session.execute(stmt)
-        
+
         for order in result.scalars():
             try:
                 await self.exchange.cancel_order(order.binance_order_id, symbol)
                 order.status = OrderStatus.CANCELED
             except Exception as e:
-                logger.error(
-                    f"Не удалось отменить ордер {order.binance_order_id}: {e}"
-                )
+                logger.error(f"Не удалось отменить ордер {order.binance_order_id}: {e}")
 
     @staticmethod
     def _log_tp_order_details(binance_order: dict, db_order: Order):
@@ -279,11 +258,7 @@ class OrderHandler:
         logger.info(f"  количество ордера в БД: {db_order.amount}")
 
     def _calculate_profit(
-        self,
-        binance_order: dict,
-        cycle: DcaCycle,
-        config: BotConfig,
-        db_order: Order
+        self, binance_order: dict, cycle: DcaCycle, config: BotConfig, db_order: Order
     ) -> float:
         """Calculate and log actual profit from TP fill"""
         base_cost = Decimal(str(binance_order.get("cost", 0)))

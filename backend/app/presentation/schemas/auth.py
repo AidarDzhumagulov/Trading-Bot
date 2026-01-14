@@ -38,7 +38,9 @@ class TokenResponse(BaseModel):
 
 
 class RefreshTokenRequest(BaseModel):
-    refresh_token: str = Field(..., description="Refresh token для обновления access token")
+    refresh_token: str = Field(
+        ..., description="Refresh token для обновления access token"
+    )
 
 
 class LogoutRequest(BaseModel):

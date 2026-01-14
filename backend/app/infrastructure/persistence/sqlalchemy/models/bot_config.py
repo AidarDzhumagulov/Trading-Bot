@@ -17,7 +17,9 @@ class BotConfig(Base):
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     is_active: Mapped[bool] = mapped_column(default=False)
-    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=func.now()
+    )
 
     binance_api_key: Mapped[str] = mapped_column(String(255), nullable=False)
     binance_api_secret: Mapped[str] = mapped_column(Text, nullable=False)

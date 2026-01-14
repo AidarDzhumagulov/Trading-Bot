@@ -15,7 +15,7 @@ async def get_binance_balance(data: BalanceCheckRequest):
 
             return BalanceResponse(
                 free_usdt=usdt_info.get("free", 0.0),
-                total_usdt=usdt_info.get("total", 0.0)
+                total_usdt=usdt_info.get("total", 0.0),
             )
     except Exception as e:
         raise HTTPException(status_code=401, detail=f"Binance API Error: {str(e)}")
