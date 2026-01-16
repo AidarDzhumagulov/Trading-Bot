@@ -24,7 +24,9 @@ class SqlAlchemyBotConfigRepository(BotConfigRepository):
     def to_model(self, data: BotConfigCreate) -> BotConfig:
         config_dict = data.model_dump()
         config_dict["binance_api_key"] = encrypt_api_key(config_dict["binance_api_key"])
-        config_dict["binance_api_secret"] = encrypt_api_key(config_dict["binance_api_secret"])
+        config_dict["binance_api_secret"] = encrypt_api_key(
+            config_dict["binance_api_secret"]
+        )
         return BotConfig(**config_dict)
 
     async def create(self, bot_config: BotConfigCreate) -> BotConfig:

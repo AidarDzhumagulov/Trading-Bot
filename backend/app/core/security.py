@@ -105,6 +105,7 @@ class EncryptionService:
             logger.error(f"Decryption failed: {e}")
             raise
 
+
 _encryption_service: Optional[EncryptionService] = None
 
 
