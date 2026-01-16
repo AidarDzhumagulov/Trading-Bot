@@ -6,6 +6,7 @@ from sqlalchemy import delete, update as sa_update, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.security import encrypt_api_key
 from app.domain.bot_config.repositories import BotConfigRepository
 from app.infrastructure.persistence.sqlalchemy.models import BotConfig, DcaCycle
 from app.infrastructure.persistence.sqlalchemy.models.dca_cycle import CycleStatus
@@ -21,7 +22,12 @@ class SqlAlchemyBotConfigRepository(BotConfigRepository):
         self.current_user = current_user
 
     def to_model(self, data: BotConfigCreate) -> BotConfig:
-        return BotConfig(**data.model_dump())
+        config_dict = data.model_dump()
+        config_dict["binance_api_key"] = encrypt_api_key(config_dict["binance_api_key"])
+        config_dict["binance_api_secret"] = encrypt_api_key(
+            config_dict["binance_api_secret"]
+        )
+        return BotConfig(**config_dict)
 
     async def create(self, bot_config: BotConfigCreate) -> BotConfig:
         bot_config = self.to_model(bot_config)

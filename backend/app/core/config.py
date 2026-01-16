@@ -46,5 +46,8 @@ class Settings(BaseSettings):
     def redis_url(self):
         return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
 
+    ENCRYPTION_MASTER_KEY: str
+    ENCRYPTION_SALT: str
+
 
 settings = Settings()
