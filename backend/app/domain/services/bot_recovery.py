@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_session_factory
 from app.core.logging import logger
+from app.core.security import decrypt_api_key
 from app.domain.order_handler import OrderHandler
 from app.infrastructure.persistence.sqlalchemy.models import BotConfig, DcaCycle, Order
 from app.infrastructure.persistence.sqlalchemy.models.dca_cycle import CycleStatus
@@ -74,12 +75,10 @@ class BotRecoveryService:
                 ).total_seconds()
                 stats = self._get_recovery_stats()
 
-                logger.info("=" * 80)
                 logger.info(f"Bot recovery completed in {self.recovery_duration:.2f}s")
                 logger.info(
                     f"Recovered: {self.recovered_count} | Failed: {self.failed_count}"
                 )
-                logger.info("=" * 80)
 
                 return stats
 
@@ -175,9 +174,9 @@ class BotRecoveryService:
 
         logger.info(f"Found {len(local_orders)} local orders to sync")
 
-        async with BinanceClient.create(
-            config.binance_api_key, config.binance_api_secret
-        ) as client:
+        api_key = decrypt_api_key(config.binance_api_key)
+        api_secret = decrypt_api_key(config.binance_api_secret)
+        async with BinanceClient.create(api_key, api_secret) as client:
             try:
                 binance_orders = await client.get_open_orders(config.symbol)
                 binance_orders_map = {str(o["id"]): o for o in binance_orders}
@@ -318,9 +317,11 @@ class BotRecoveryService:
 
             session_factory = get_session_factory()
 
+            api_key = decrypt_api_key(config.binance_api_key)
+            api_secret = decrypt_api_key(config.binance_api_secret)
             ws_manager = BinanceWebsocketManager(
-                api_key=config.binance_api_key,
-                api_secret=config.binance_api_secret,
+                api_key=api_key,
+                api_secret=api_secret,
                 session_factory=session_factory,
                 config_id=config.id,
                 symbol=config.symbol,

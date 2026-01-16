@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_session_factory
 from app.core.logging import logger
+from app.core.security import decrypt_api_key
 from app.infrastructure.persistence.sqlalchemy.models import DcaCycle, Order
 from app.infrastructure.persistence.sqlalchemy.models.dca_cycle import CycleStatus
 from app.infrastructure.persistence.sqlalchemy.models.order import OrderStatus
@@ -23,9 +24,9 @@ class BotManager:
         self.session = session
 
     async def start_first_cycle(self, config):
-        async with BinanceClient.create(
-            config.binance_api_key, config.binance_api_secret
-        ) as client:
+        api_key = decrypt_api_key(config.binance_api_key)
+        api_secret = decrypt_api_key(config.binance_api_secret)
+        async with BinanceClient.create(api_key, api_secret) as client:
             try:
                 free_usdt = await client.get_free_usdt()
 
@@ -143,9 +144,11 @@ class BotManager:
             await asyncio.sleep(0.5)
             logger.info("Old WebSocket stopped successfully")
 
+        api_key = decrypt_api_key(config.binance_api_key)
+        api_secret = decrypt_api_key(config.binance_api_secret)
         ws_manager = BinanceWebsocketManager(
-            api_key=config.binance_api_key,
-            api_secret=config.binance_api_secret,
+            api_key=api_key,
+            api_secret=api_secret,
             session_factory=get_session_factory(),
             config_id=config.id,
             symbol=config.symbol,
@@ -156,9 +159,9 @@ class BotManager:
         logger.info(f"WebSocket Manager запущен для config_id: {config.id}")
 
     async def shift_grid(self, cycle: DcaCycle, config, current_price: float):
-        async with BinanceClient.create(
-            config.binance_api_key, config.binance_api_secret
-        ) as client:
+        api_key = decrypt_api_key(config.binance_api_key)
+        api_secret = decrypt_api_key(config.binance_api_secret)
+        async with BinanceClient.create(api_key, api_secret) as client:
             try:
                 await self._cancel_pending_orders(cycle, config, client)
                 await self._delete_unfilled_orders(cycle)

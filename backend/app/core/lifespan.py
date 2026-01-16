@@ -14,9 +14,9 @@ async def lifespan(app: FastAPI):
     await RedisConnectionPool.init_redis_pool()
     recovery_stats = await bot_recovery_service.recover_all_active_bots()
     logger.info("BACKEND STARTUP COMPLETED")
-    logger.info(f"Bots recovered: {recovery_stats['recovered']}")
-    logger.info(f"Bots failed: {recovery_stats['failed']}")
-    logger.info(f"Recovery time: {recovery_stats['duration_seconds']:.2f}s")
+    if recovery_stats:
+        logger.info(f"Bots recovered: {recovery_stats.get('recovered', 0)}")
+        logger.info(f"Bots failed: {recovery_stats.get('failed', 0)}")
 
     yield
 
